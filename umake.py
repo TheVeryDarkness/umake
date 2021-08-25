@@ -25,6 +25,10 @@ RESET = Fore.RESET
 linesep = '\n'
 
 
+def remove_space(s: str):
+    return s.strip().replace(' ', '').replace('\t', '')
+
+
 def unique_min(*numbers: int):
     res = min(*numbers)
     assert numbers.count(res) == 1
@@ -40,7 +44,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
         if relSrcToRoot in depsDict:
-            if verbosity >= 2:
+            if verbosity >= 3:
                 print(BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
         else:
             depsDict[relSrcToRoot] = scanFileDependencies(
@@ -124,14 +128,14 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 if lib:
                     span = lib.span()
                     _path = content[span[0]:span[1]]
-                    if verbosity >= 3:
+                    if verbosity >= 4:
                         print(BLUE + "Including library header "+_path + RESET)
                     content = content[span[1]+1:]
                     info[0].append(_path[1:-1])
                 elif loc:
                     span = loc.span()
                     _path = content[span[0]:span[1]]
-                    if verbosity >= 3:
+                    if verbosity >= 4:
                         print(BLUE + "Including local header "+_path + RESET)
                     content = content[span[1]+1:]
                     info[1].append(_path[1:-1])
@@ -189,7 +193,7 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 # Does it possible to have a semicolon in the name of a imported header?
                 import_end = re.search(r';', content).span()[0]
                 imported = content[import_begin:import_end]
-                imported.strip()
+                imported = remove_space(imported)
                 if re.fullmatch(r"<[^<>]*>", imported):
                     info[2].append(imported)
                 elif re.fullmatch(r"\"[^\"]*\"", imported):
@@ -206,17 +210,15 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 if content.startswith("module"):
                     assert len(info[5]) == 0, "Exporting more than 1 modules"
                     content = content.removeprefix("module")
-                    content = content.lstrip()
                     semicolon = content.find(";")
-                    info[5].append(content[:semicolon])
+                    info[5].append(remove_space(content[:semicolon]))
                 elif content.startswith("import"):
                     assert len(
                         info[5]) != 0, "Re-exporting should be written after exporting."
                     content = content.removeprefix("import")
-                    content = content.lstrip()
                     semicolon = content.find(";")
                     partition = content[:semicolon]
-                    info[2].append(info[5][0]+partition)
+                    info[2].append(info[5][0] + remove_space(partition))
                 else:
                     if verbosity >= 5:
                         print(CYAN + "Exporting" + RESET)
@@ -259,7 +261,8 @@ if __name__ == "__main__":
 
     assert path.isdir(root)
     relRoot = path.relpath(root)
-    depsDict = dict()
+    depsDict: dict[str, tuple[list[str], list[str],
+                              list[str], list[str], list[str], list[str]]] = dict()
     modulesToBePreCompiledByEachSource = dict()
     try:
         for source in sources:
@@ -271,21 +274,31 @@ if __name__ == "__main__":
                 relFileToCur = path.relpath(path.join(dir, file))
                 relFileToRoot = path.relpath(relFileToCur, relRoot)
                 if ext not in module:
-                    if verbosity >= 3:
+                    if verbosity >= 4:
                         print(
                             "Walked-through file \"{}\" has a different extension name, skipped.".format(relFileToCur))
                     continue
                 if relFileToRoot not in depsDict:
-                    modulesToBePreCompiledByEachSource[source] = recursiveScanLocalDependencies(
+                    modulesToBePreCompiledByEachSource[relFileToRoot] = recursiveScanLocalDependencies(
                         relFileToCur, relRoot, depsDict, verbosity, encoding)
+        modules_not_found: list[str] = []
         for _source, modulesToBePreCompiled in modulesToBePreCompiledByEachSource.items():
             for moduleToBePreCompiled in modulesToBePreCompiled[2]:
                 if moduleToBePreCompiled not in modulesBiDict:
                     print(
-                        YELLOW+"Imported module \"{}\" is not found from dependencies of{}".format(moduleToBePreCompiled, _source)+RESET)
+                        YELLOW+"Imported module \"{}\" from dependencies of {} is not found".format(moduleToBePreCompiled, _source)+RESET)
+                    modules_not_found.append(modulesToBePreCompiled)
+        if len(modules_not_found) != 0:
+            for _source, _deps in depsDict.items():
+                for imported in _deps[2]:
+                    if imported not in modulesBiDict:
+                        print(
+                            YELLOW+"Module \"{}\" imported from \"{}\" is not found.".format(imported, _source)+RESET)
         if target == "dict":
             print(GREEN + str(modulesToBePreCompiledByEachSource) + RESET)
             print(GREEN + str(modulesBiDict) + RESET)
+            if verbosity >= 2:
+                print(GREEN + str(depsDict) + RESET)
         else:
             raise Exception("Unknown target")
     except Exception as e:
