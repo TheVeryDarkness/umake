@@ -1,11 +1,12 @@
 """
-A minimal build tool for c++.
+A minimal build tool for c++ under MIT license.
+Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 Do not write coded like below to confuse me,
 especially when importing that would cause errors:
 
-# if 0
+#if 0
 import somemodule;
-# endif
+#endif
 """
 import argparse
 from bidict import bidict
@@ -13,7 +14,6 @@ from colorama import Fore, init
 import os.path as path
 import os
 import re
-from typing import Union
 
 init()
 GREEN = Fore.GREEN
@@ -60,7 +60,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict
             relIncludedToRoot = path.relpath(
                 path.join(relSrcDirToRoot, relIncludedToSrc))
             relIncludedToCur = path.relpath(
-                path.join(relRoot, relIncludedToRoot))
+                path.join(relRootToCur, relIncludedToRoot))
             newDeps = recursiveScanLocalDependencies(
                 relIncludedToCur, relRootToCur, depsDict, verbosity, encoding)
 
@@ -226,7 +226,7 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 raise
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("sources", metavar="source", nargs="+",
                         type=str, help="The main source file to compile and link to.")
@@ -296,11 +296,17 @@ if __name__ == "__main__":
                             YELLOW+"Module \"{}\" imported from \"{}\" is not found.".format(imported, _source)+RESET)
         if target == "dict":
             print(GREEN + str(modulesToBePreCompiledByEachSource) + RESET)
-            print(GREEN + str(modulesBiDict) + RESET)
+            print(BLUE + str(modulesBiDict) + RESET)
             if verbosity >= 2:
-                print(GREEN + str(depsDict) + RESET)
+                print(str(depsDict))
         else:
             raise Exception("Unknown target")
     except Exception as e:
         print('\t', RED + str(e) + RESET, sep="")
         print(RED + "Failed for parsed arguments: {}.".format(args) + RESET)
+
+
+if __name__ == "__main__":
+    # import profile
+    # profile.run("main()")
+    main()
