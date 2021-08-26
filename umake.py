@@ -16,12 +16,12 @@ import os
 import re
 
 init()
-GREEN = Fore.GREEN
-BLUE = Fore.BLUE
-CYAN = Fore.CYAN
-YELLOW = Fore.YELLOW
-RED = Fore.RED
-RESET = Fore.RESET
+GREEN: str = Fore.GREEN
+BLUE: str = Fore.BLUE
+CYAN: str = Fore.CYAN
+YELLOW: str = Fore.YELLOW
+RED: str = Fore.RED
+RESET: str = Fore.RESET
 linesep = '\n'
 
 
@@ -37,10 +37,12 @@ def unique_min(*numbers: int):
 
 # module name <--> relative path to current directory
 global modulesBiDict
-modulesBiDict = bidict()
+modulesBiDict: bidict = bidict()
+global content
+content: str
 
 
-def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict: dict, verbosity: int, encoding: str) -> list[set[str], set[str]]:
+def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict: dict, verbosity: int, encoding: str) -> list[set[str]]:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
         if relSrcToRoot in depsDict:
@@ -121,8 +123,7 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
 
             if a == unique_min(a, b, c, d, e, f, g):
                 content = content[a+len("#include"):]
-                next = re.search("[^\s]", content)
-                content = content[next.span()[0]:]
+                content = content.lstrip()
                 lib = re.search(r"^<[^<>]*>", content)
                 loc = re.search(r'^"[^"]*"', content)
                 if lib:
@@ -191,7 +192,8 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 content = content[next.span()[0]:]
                 import_begin = 0
                 # Does it possible to have a semicolon in the name of a imported header?
-                import_end = re.search(r';', content).span()[0]
+                import_end = content.find(r';')
+                assert import_end != -1, "Unexpected termination after 'import'"
                 imported = content[import_begin:import_end]
                 imported = remove_space(imported)
                 if re.fullmatch(r"<[^<>]*>", imported):
