@@ -2,6 +2,9 @@
 A minimal dependencies scanning tool for c++ under MIT license.
 Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 """
+from __future__ import annotations
+
+from typing import Optional, Union
 from bidict import bidict
 from colorama import Fore, init
 import os.path as path
@@ -30,12 +33,63 @@ def __uniqueMin(*numbers: int):
 
 # module name <--> relative path to current directory
 global modulesBiDict
-modulesBiDict: bidict = bidict()
+modulesBiDict: bidict[str, str] = bidict()
 global content
 content: str
 
 
-def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict: dict, verbosity: int, encoding: str) -> list[set[str]]:
+class headersDependency:
+    def __init__(self, library: set[str], local: set[str]) -> None:
+        self.local = local
+        self.library = library
+
+    def __repr__(self) -> str:
+        res = dict()
+        for key in ["library", "local"]:
+            if self.__dict__[key] and len(self.__dict__[key]) != 0:
+                res.update({key: self.__dict__[key]})
+        return str(res)
+
+
+class modulesDependency:
+    def __init__(self, module: set[str], library: set[str], local: set[str]) -> None:
+        self.module = module
+        self.library = library
+        self.local = local
+
+    def unionWith(self, newDeps: modulesDependency):
+        self.module = self.module.union(newDeps.module)
+        self.library = self.library.union(newDeps.library)
+        self.local = self.library.union(newDeps.local)
+
+    def __repr__(self) -> str:
+        res = dict()
+        for key in ["module", "library", "local"]:
+            if self.__dict__[key] and len(self.__dict__[key]) != 0:
+                res.update({key: self.__dict__[key]})
+        return str(res)
+
+
+class dependency:
+    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None) -> None:
+        self.headers = headers if headers else headersDependency(set(), set())
+        self.modules = modules if modules else modulesDependency(
+            set(), set(), set())
+        self.provided = provided
+
+    def __repr__(self) -> str:
+        res = dict()
+        for key in ["headers", "modules", "provided"]:
+            if self.__dict__[key] and len(self.__dict__[key]) != 0:
+                res.update({key: self.__dict__[key]})
+        return str(res)
+
+
+global depsDict
+depsDict: dict[str, dependency] = dict()
+
+
+def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str) -> modulesDependency:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
         if relSrcToRoot in depsDict:
@@ -45,37 +99,27 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, depsDict
             depsDict[relSrcToRoot] = scanFileDependencies(
                 relSrcToCur, verbosity, encoding)
         relSrcDirToRoot = path.dirname(relSrcToRoot)
-        imported = [set(depsDict[relSrcToRoot][i]) for i in range(2, 5)]
-        exported = depsDict[relSrcToRoot][5]
+        imported = depsDict[relSrcToRoot].modules
+        exported = depsDict[relSrcToRoot].provided
         if exported:
-            assert len(exported) == 1
-            modulesBiDict.update({exported[0]: relSrcToRoot})
-        for relIncludedToSrc in depsDict[relSrcToRoot][1]:
+            modulesBiDict.update({exported: relSrcToRoot})
+        for relIncludedToSrc in depsDict[relSrcToRoot].headers.local:
             assert not path.isabs(relIncludedToSrc)
             relIncludedToRoot = path.relpath(
                 path.join(relSrcDirToRoot, relIncludedToSrc))
             relIncludedToCur = path.relpath(
                 path.join(relRootToCur, relIncludedToRoot))
             newDeps = recursiveScanLocalDependencies(
-                relIncludedToCur, relRootToCur, depsDict, verbosity, encoding)
+                relIncludedToCur, relRootToCur, verbosity, encoding)
 
-            for i in range(3):
-                imported[i] = imported[i].union(newDeps[i])
+            imported.unionWith(newDeps)
         return imported
     except:
         print(YELLOW + "In file {}:".format(relSrcToCur) + RESET)
         raise
 
 
-def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[list[str], list[str], list[str], list[str], list[str], list[str]]:
-    '''
-    0 list: Included global headers
-    1 list: Included local headers
-    2 list: Imported modules
-    3 list: Imported global headers (Legacy)
-    4 list: Imported local headers (Legacy)
-    5 str|None: Exported Module
-    '''
+def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> dependency:
     if not path.exists(filename):
         raise Exception("Unexistent file {} referenced.".format(filename))
     with open(filename, encoding=encoding) as file:
@@ -90,8 +134,7 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 print(CYAN+desc+RESET)
                 print(content[:next_index])
             content = content[next_index+1:]
-        info: tuple[list[str], list[str], list[str], list[str],
-                    list[str], list[str]] = ([], [], [], [], [], [])
+        info: dependency = dependency()
         while True:
             # Optimizable
             a, b, c, d, e, f, g = (content.find(s)
@@ -125,14 +168,14 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                     if verbosity >= 4:
                         print(BLUE + "Including library header "+_path + RESET)
                     content = content[span[1]+1:]
-                    info[0].append(_path[1:-1])
+                    info.headers.library.add(_path[1:-1])
                 elif loc:
                     span = loc.span()
                     _path = content[span[0]:span[1]]
                     if verbosity >= 4:
                         print(BLUE + "Including local header "+_path + RESET)
                     content = content[span[1]+1:]
-                    info[1].append(_path[1:-1])
+                    info.headers.local.add(_path[1:-1])
                 else:
                     raise Exception("What's being included?")
             elif b == __uniqueMin(a, b, c, d, e, f, g):
@@ -190,11 +233,11 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 imported = content[import_begin:import_end]
                 imported = __removeSpace(imported)
                 if re.fullmatch(r"<[^<>]*>", imported):
-                    info[2].append(imported)
+                    info.modules.library.add(imported)
                 elif re.fullmatch(r"\"[^\"]*\"", imported):
-                    info[3].append(imported)
+                    info.modules.local.add(imported)
                 elif re.fullmatch(r"[\w.:]+", imported):
-                    info[4].append(imported)
+                    info.modules.module.add(imported)
                 else:
                     raise Exception("What's being imported?")
             elif g == __uniqueMin(a, b, c, d, e, f, g):
@@ -203,20 +246,19 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> tuple[
                 assert next, "Unexpected termination."
                 content = content[next.span()[0]:]
                 if content.startswith("module"):
-                    assert len(info[5]) == 0, "Exporting more than 1 modules"
+                    assert not info.provided, "Exporting more than 1 modules"
                     content = content.removeprefix("module")
                     semicolon = content.find(";")
-                    info[5].append(__removeSpace(content[:semicolon]))
+                    info.provided = __removeSpace(content[:semicolon])
                 elif content.startswith("import"):
-                    assert len(
-                        info[5]) != 0, "Re-exporting should be written after exporting."
+                    assert info.provided, "Re-exporting should be written after exporting."
                     content = content.removeprefix("import")
                     semicolon = content.find(";")
                     partition = content[:semicolon]
-                    info[2].append(info[5][0] + __removeSpace(partition))
+                    info.modules.module.add(
+                        info.provided + __removeSpace(partition))
                 else:
                     if verbosity >= 5:
                         print(CYAN + "Exporting" + RESET)
             else:
                 raise
-

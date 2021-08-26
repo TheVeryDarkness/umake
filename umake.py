@@ -3,8 +3,7 @@ A minimal build tool for c++ under MIT license.
 Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 """
 import argparse
-from bidict import bidict
-from colorama import Fore, init
+import json
 import os.path as path
 import os
 
@@ -19,7 +18,7 @@ def main():
     parser.add_argument("-p", "--project", type=str,
                         help="The path to thr source file folder for the project. Every file in this folder may be scanned for module, especially if the project uses import. Root by default.")
     parser.add_argument("-v", "--verbose", action="count", default=0,
-                        help="More verbose output.")
+                        help="Verbosity level.")
     parser.add_argument("-r", "--root", type=str,
                         help="The root path to generate build file, such as makefile or scripts.")
     parser.add_argument("-t", "--target", type=str,
@@ -49,13 +48,11 @@ def main():
 
     assert path.isdir(root)
     relRoot = path.relpath(root)
-    depsDict: dict[str, tuple[list[str], list[str],
-                              list[str], list[str], list[str], list[str]]] = dict()
-    modulesToBePreCompiledByEachSource = dict()
+    modulesToBePreCompiledByEachSource: dict[str, modulesDependency] = dict()
     try:
         for source in sources:
             modulesToBePreCompiledByEachSource[source] = recursiveScanLocalDependencies(
-                source, relRoot, depsDict, verbosity, encoding)
+                source, relRoot, verbosity, encoding)
         for dir, dirs, files in os.walk(project):
             for file in files:
                 nothing, ext = path.splitext(file)
@@ -68,14 +65,15 @@ def main():
                     continue
                 if relFileToRoot not in depsDict:
                     modulesToBePreCompiledByEachSource[relFileToRoot] = recursiveScanLocalDependencies(
-                        relFileToCur, relRoot, depsDict, verbosity, encoding)
+                        relFileToCur, relRoot, verbosity, encoding)
         modules_not_found: list[str] = []
         for _source, modulesToBePreCompiled in modulesToBePreCompiledByEachSource.items():
-            for moduleToBePreCompiled in modulesToBePreCompiled[2]:
+            for moduleToBePreCompiled in modulesToBePreCompiled.module:
                 if moduleToBePreCompiled not in modulesBiDict:
                     print(
                         YELLOW+"Imported module \"{}\" from dependencies of {} is not found".format(moduleToBePreCompiled, _source)+RESET)
                     modules_not_found.append(modulesToBePreCompiled)
+
         if len(modules_not_found) != 0:
             for _source, _deps in depsDict.items():
                 for imported in _deps[2]:
