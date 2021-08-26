@@ -7,9 +7,11 @@ from __future__ import annotations
 from typing import Optional, Union
 from bidict import bidict
 from colorama import Fore, init
-import os.path as path
+import json
 import os
+import os.path as path
 import re
+import time
 
 init()
 GREEN: str = Fore.GREEN
@@ -31,17 +33,13 @@ def __uniqueMin(*numbers: int):
     return res
 
 
-# module name <--> relative path to current directory
-global modulesBiDict
-modulesBiDict: bidict[str, str] = bidict()
-global content
-content: str
-
-
 class headersDependency:
     def __init__(self, library: set[str], local: set[str]) -> None:
         self.local = local
         self.library = library
+
+    def __len__(self) -> int:
+        return sum([0 if len(self.__dict__[key]) == 0 else 1 for key in ["local", "library"]])
 
     def __repr__(self) -> str:
         res = dict()
@@ -57,6 +55,9 @@ class modulesDependency:
         self.library = library
         self.local = local
 
+    def __len__(self) -> int:
+        return sum([0 if len(self.__dict__[key]) == 0 else 1 for key in ["module", "library", "local"]])
+
     def unionWith(self, newDeps: modulesDependency):
         self.module = self.module.union(newDeps.module)
         self.library = self.library.union(newDeps.library)
@@ -71,20 +72,41 @@ class modulesDependency:
 
 
 class dependency:
-    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None) -> None:
+    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, time: Optional[float] = None) -> None:
         self.headers = headers if headers else headersDependency(set(), set())
         self.modules = modules if modules else modulesDependency(
             set(), set(), set())
         self.provided = provided
+        self.time = time
+        assert not provided or re.fullmatch("[\w.:]*", provided)
+        assert time
 
     def __repr__(self) -> str:
         res = dict()
-        for key in ["headers", "modules", "provided"]:
+        for key in ["headers", "modules", "provided", "time"]:
             if self.__dict__[key] and len(self.__dict__[key]) != 0:
                 res.update({key: self.__dict__[key]})
         return str(res)
 
 
+class encoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, dependency):
+            return {"headers": obj.headers, "modules": obj.modules, "provided": obj.provided, "time": obj.time}
+        elif isinstance(obj, modulesDependency):
+            return {"module": obj.module, "library": obj.library, "local": obj.local}
+        elif isinstance(obj, headersDependency):
+            return {"library": obj.library, "local": obj.local}
+        elif isinstance(obj, set):
+            return list(obj)
+        return json.JSONEncoder.default(self, obj)
+
+
+# module name <--> relative path to current directory
+global modulesBiDict
+modulesBiDict: bidict[str, str] = bidict()
+global content
+content: str
 global depsDict
 depsDict: dict[str, dependency] = dict()
 
@@ -95,6 +117,10 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
         if relSrcToRoot in depsDict:
             if verbosity >= 3:
                 print(BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
+        elif time.time() > path.getmtime(relSrcToCur):
+            if verbosity >= 2:
+                print(
+                    BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
         else:
             depsDict[relSrcToRoot] = scanFileDependencies(
                 relSrcToCur, verbosity, encoding)
@@ -134,7 +160,7 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> depend
                 print(CYAN+desc+RESET)
                 print(content[:next_index])
             content = content[next_index+1:]
-        info: dependency = dependency()
+        info: dependency = dependency(time=time.time())
         while True:
             # Optimizable
             a, b, c, d, e, f, g = (content.find(s)
@@ -262,3 +288,32 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> depend
                         print(CYAN + "Exporting" + RESET)
             else:
                 raise
+
+
+CACHE_PATH = "umakeCache.json"
+
+
+def save(relRootToCur: str):
+    with open(path.join(relRootToCur, CACHE_PATH), 'w') as cache:
+        json.dump(depsDict, cache, cls=encoder)
+
+
+def load(relRootToCur: str):
+    relCacheToCur = path.relpath(path.join(relRootToCur, CACHE_PATH))
+    if path.exists(relCacheToCur):
+        try:
+            with open(relCacheToCur) as cache:
+                s: dict[str, dict[str, Union[str, list[str]]]
+                        ] = json.load(cache)
+                for source, dep in s.items():
+                    depsDict.update({source: dependency(
+                        headersDependency(set(dep["headers"]["library"]), set(
+                            dep["headers"]["local"])),
+                        modulesDependency(set(dep["modules"]["module"]), set(
+                            dep["modules"]["library"]), set(dep["modules"]["local"])),
+                        dep["provided"],
+                        dep["time"])})
+        except Exception as e:
+            print("Original cache is not correct for reason below. Deleting.")
+            print(e)
+            os.remove(relCacheToCur)

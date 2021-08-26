@@ -49,6 +49,9 @@ def main():
     assert path.isdir(root)
     relRoot = path.relpath(root)
     modulesToBePreCompiledByEachSource: dict[str, modulesDependency] = dict()
+
+    load(relRoot)
+
     try:
         for source in sources:
             modulesToBePreCompiledByEachSource[source] = recursiveScanLocalDependencies(
@@ -63,9 +66,8 @@ def main():
                         print(
                             "Walked-through file \"{}\" has a different extension name, skipped.".format(relFileToCur))
                     continue
-                if relFileToRoot not in depsDict:
-                    modulesToBePreCompiledByEachSource[relFileToRoot] = recursiveScanLocalDependencies(
-                        relFileToCur, relRoot, verbosity, encoding)
+                modulesToBePreCompiledByEachSource[relFileToRoot] = recursiveScanLocalDependencies(
+                    relFileToCur, relRoot, verbosity, encoding)
         modules_not_found: list[str] = []
         for _source, modulesToBePreCompiled in modulesToBePreCompiledByEachSource.items():
             for moduleToBePreCompiled in modulesToBePreCompiled.module:
@@ -76,7 +78,7 @@ def main():
 
         if len(modules_not_found) != 0:
             for _source, _deps in depsDict.items():
-                for imported in _deps[2]:
+                for imported in _deps.modules.module:
                     if imported not in modulesBiDict:
                         print(
                             YELLOW+"Module \"{}\" imported from \"{}\" is not found.".format(imported, _source)+RESET)
@@ -85,11 +87,15 @@ def main():
             print(BLUE + str(modulesBiDict) + RESET)
             if verbosity >= 2:
                 print(str(depsDict))
+        elif target == 'ninja':
+            generate_ninja(path.join(relRoot, "build.ninja"),
+                           modulesToBePreCompiledByEachSource)
         else:
             raise Exception("Unknown target")
     except Exception as e:
         print('\t', RED + str(e) + RESET, sep="")
         print(RED + "Failed for parsed arguments: {}.".format(args) + RESET)
+    save(relRoot)
 
 
 if __name__ == "__main__":
