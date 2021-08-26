@@ -101,4 +101,18 @@ def main():
 if __name__ == "__main__":
     # import profile
     # profile.run("main()")
+    # import cProfile
+    # cProfile.run("main()")
     main()
+
+    # import tracemalloc
+    # tracemalloc.start()
+
+    # main()
+
+    # snapshot = tracemalloc.take_snapshot()
+    # top_stats = snapshot.statistics('lineno')
+
+    # print("[ Top 10 ]")
+    # for stat in top_stats[:10]:
+    #     print(stat)
