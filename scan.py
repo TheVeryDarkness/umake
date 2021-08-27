@@ -3,6 +3,7 @@ A minimal dependencies scanning tool for c++ under MIT license.
 Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 """
 from __future__ import annotations
+from sys import stderr
 
 from typing import Optional, Union
 from bidict import bidict
@@ -114,14 +115,18 @@ depsDict: dict[str, dependency] = dict()
 def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str) -> modulesDependency:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
+        skip = False
         if relSrcToRoot in depsDict:
-            if verbosity >= 3:
-                print(BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
-        elif time.time() > path.getmtime(relSrcToCur):
-            if verbosity >= 2:
-                print(
-                    BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
-        else:
+            if time.time() > path.getmtime(relSrcToCur):
+                if verbosity >= 2:
+                    print(
+                        BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
+                skip = True
+            else:
+                if verbosity >= 3:
+                    print(
+                        BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
+        if not skip:
             depsDict[relSrcToRoot] = scanFileDependencies(
                 relSrcToCur, verbosity, encoding)
         relSrcDirToRoot = path.dirname(relSrcToRoot)
@@ -141,13 +146,13 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
             imported.unionWith(newDeps)
         return imported
     except:
-        print(YELLOW + "In file {}:".format(relSrcToCur) + RESET)
+        print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, stderr)
         raise
 
 
 def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> dependency:
     if not path.exists(filename):
-        raise Exception("Unexistent file {} referenced.".format(filename))
+        raise Exception("Unexistent file \"{}\" referenced.".format(filename))
     with open(filename, encoding=encoding) as file:
         if verbosity >= 1:
             print(BLUE + "Scanning file \"{}\"".format(filename) + RESET)
