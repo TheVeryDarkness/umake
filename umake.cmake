@@ -176,9 +176,20 @@ function(execute_umake_command command)
 endfunction()
 
 # umake should be downloaded first
-function(add_main_source UMAKE_PATH)
+function(add_main_source)
+    math(EXPR ODD "${ARGC}%2")
+    if(ODD)
+        list(POP_FRONT ARGN UMAKE_PATH)
+    else()
+        if(EXISTS "umakeConfig.json")
+            file(STRINGS "umakeConfig.json" configJSON)
+            string(JSON UMAKE_PATH GET ${configJSON} "umake.py")
+        else()
+            message(FATAL_ERROR "Configuration does not exist, please specify the path to umake.py.")
+        endif()
+    endif()
     execute_process(
-        COMMAND python ${UMAKE_PATH} --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
+        COMMAND python ${UMAKE_PATH} --load-config --save-config --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
         OUTPUT_VARIABLE RESULT
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )

@@ -117,15 +117,15 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
         skip = False
         if relSrcToRoot in depsDict:
-            if time.time() > path.getmtime(relSrcToCur):
+            if time.time() < path.getmtime(relSrcToCur):
                 if verbosity >= 2:
                     print(
                         BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
-                skip = True
             else:
                 if verbosity >= 3:
                     print(
                         BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
+                skip = True
         if not skip:
             depsDict[relSrcToRoot] = scanFileDependencies(
                 relSrcToCur, verbosity, encoding)
@@ -298,12 +298,12 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> depend
 CACHE_PATH = "umakeCache.json"
 
 
-def save(relRootToCur: str):
+def saveCache(relRootToCur: str):
     with open(path.join(relRootToCur, CACHE_PATH), 'w') as cache:
         json.dump(depsDict, cache, cls=encoder)
 
 
-def load(relRootToCur: str):
+def loadCache(relRootToCur: str):
     relCacheToCur = path.relpath(path.join(relRootToCur, CACHE_PATH))
     if path.exists(relCacheToCur):
         try:

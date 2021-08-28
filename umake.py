@@ -3,37 +3,77 @@ A minimal build tool for c++ under MIT license.
 Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 """
 import argparse
-import json
 import os.path as path
 import os
-from posixpath import relpath
 from sys import stderr
 
 from scan import *
 from generate import *
 
+CONFIG_PATH = "umakeConfig.json"
+
+
+def loadConfig(args: argparse.Namespace, preferred: bool):
+    configPath = path.join(args.root, CONFIG_PATH)
+    if not path.exists(configPath) and not preferred:
+        return
+    with open(configPath) as config:
+        cfg = json.load(config)
+        for key, value in cfg.items():
+            if preferred or key not in vars(args).keys():
+                vars(args)[key] = value
+
+
+def saveConfig(args: argparse.Namespace):
+    with open(path.join(args.root, CONFIG_PATH), 'w') as config:
+        json.dump(vars(args), config)
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("sources", nargs='+', type=str,
+    parser.add_argument("sources", nargs='*', type=str, default=[],
                         help="The main target and its source file to compile and link to.")
-    parser.add_argument("-p", "--project", type=str,
-                        help="The path to thr source file folder for the project. Every file in this folder may be scanned for module, especially if the project uses import. Root by default.")
     parser.add_argument("-v", "--verbose", action="count", default=0,
-                        help="Verbosity level.")
-    parser.add_argument("-r", "--root", type=str,
-                        help="The root path to generate build file, such as makefile or scripts.")
+                        help="Verbosity level. Repeat this option to increase.")
+    parser.add_argument("-r", "--root", type=str, default='.',
+                        help="The root path to generate build file, such as makefile or scripts. Current working directory by default.")
+    parser.add_argument("-p", "--project", type=str,
+                        help="The path to the source file folder for the project. Every file in this folder may be scanned for module exports. Root by default.")
     parser.add_argument("-t", "--target", type=str,
-                        help="The target format of build file.")
-    parser.add_argument("-M", "--module", type=str, nargs="+", default=[
-                        ".ixx", ".mpp", ".cppm"], help="Possible extension names of cpp module interface files.")
+                        help="The target format of output.")
+    parser.add_argument("-M", "--module", type=str, nargs="+",
+                        default=[".ixx", ".mpp", ".cppm"],
+                        help="Possible extension names of cpp module interface files. Other files will be skipped during modules scanning.")
     parser.add_argument("-e", "--encoding", type=str,
                         default="UTF-8", help="The encoding of source files.")
-    parser.add_argument("-E", "--exclude", nargs="+",
-                        type=str, help="Folders to be excluded.")
+    parser.add_argument("-Ed", "--exclude-dirs", nargs="+", default=[],
+                        type=str, help="Folders to be excluded. Treated as regex.")
+    parser.add_argument("-Ef", "--exclude-files", nargs="+", default=[],
+                        type=str, help="Files to be excluded. Treated as regex.")
     parser.add_argument("-c", "--cc", type=str, help="C compiler")
     parser.add_argument("-C", "--cxx", type=str, help="C++ compiler")
+    parser.add_argument("--save-config", action="store_true",
+                        help="Ask umake to generate umakeConfig.json and save configurations.")
+    parser.add_argument_group()
+    parser.add_argument("--load-config", action="store_true",
+                        help="Ask umake to read and load umakeConfig.json on root. Configuration will be preferred unless not given.")
+    parser.add_argument("--prefer-config", action="store_true",
+                        help="Configuration will be preferred unless not given.")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Disable scanning caches")
     args = parser.parse_args()
+
+    _loadConfig = args.load_config
+    _saveConfig = args.save_config
+    _preferConfig = args.prefer_config
+
+    if _loadConfig:
+        loadConfig(args, _preferConfig)
+    if _saveConfig:
+        saveConfig(args)
+
+    if not args.project:
+        args.project = args.root
 
     root: str = args.root
     assert path.isdir(root)
@@ -52,15 +92,14 @@ def main():
     encoding: str = args.encoding
     project: str = args.project
     moduleExtension: list[str] = args.module
-    if not project and root:
-        project = root
-    else:
-        if verbosity >= 1:
-            print("No project source file directory given, so your modules, if imported somewhere, may not be found, unless you specify all of them in args.")
+    excludeFiles = args.exclude_files
+    excludeDirs = args.exclude_dirs
+    cacheDisabled = args.no_cache
 
     modulesToBePreCompiledByEachSource: dict[str, modulesDependency] = dict()
 
-    load(relRoot)
+    if not cacheDisabled:
+        loadCache(relRoot)
 
     try:
         for source in sources:
@@ -68,14 +107,34 @@ def main():
             modulesToBePreCompiledByEachSource[relSource] = recursiveScanLocalDependencies(
                 source, relRoot, verbosity, encoding)
         for dir, dirs, files in os.walk(project):
+            relDirToCur = path.relpath(dir)
+            relDirToRoot = path.relpath(relDirToCur, relRoot)
+            for excludeDir in excludeDirs:
+                if relDirToRoot == excludeDir:
+                    if verbosity >= 4:
+                        print(
+                            "Walked-through dir \"{}\" is excluded as it matches \"{}\"."
+                            .format(relDirToCur, excludeDir)
+                        )
+                    continue
             for file in files:
                 nothing, ext = path.splitext(file)
                 relFileToCur = path.relpath(path.join(dir, file))
                 relFileToRoot = path.relpath(relFileToCur, relRoot)
+                for excludeFile in excludeFiles:
+                    if relFileToRoot == excludeFile:
+                        if verbosity >= 4:
+                            print(
+                                "Walked-through file \"{}\" is excluded as it matches \"{}\"."
+                                .format(relFileToCur, excludeFile)
+                            )
+                        continue
                 if ext not in moduleExtension:
                     if verbosity >= 4:
                         print(
-                            "Walked-through file \"{}\" has a different extension name, skipped.".format(relFileToCur))
+                            "Walked-through file \"{}\" has a different extension name, skipped."
+                            .format(relFileToCur)
+                        )
                     continue
                 modulesToBePreCompiledByEachSource[relFileToRoot] = recursiveScanLocalDependencies(
                     relFileToCur, relRoot, verbosity, encoding)
@@ -141,7 +200,8 @@ def main():
         print('\t', RED + str(e) + RESET, sep="", file=stderr)
         print(RED + "Failed for parsed arguments: {}.".format(args) +
               RESET, file=stderr)
-    save(relRoot)
+    if not cacheDisabled:
+        saveCache(relRoot)
 
 
 if __name__ == "__main__":
