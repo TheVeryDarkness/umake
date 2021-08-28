@@ -46,7 +46,6 @@ def generate_ninja(filename: str, modulesToBePreCompiledByEachSource: dict[str, 
         out.rule(
             "pcm", "$cxx $standard $module $interface $in $moduleOut $out.$ext $objOut $out")
         out.rule("cxx", "$cxx $standard $module $in $objOut $out")
-        modules = set()
 
         # for source, modulesToBePreCompiled in modulesToBePreCompiledByEachSource.items():
         #     modules = modules.union(modulesToBePreCompiled.module)

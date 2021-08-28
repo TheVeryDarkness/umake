@@ -5,7 +5,7 @@ Written by TheVeryDarkness, 1853308@tongji.edu.cn on Github.
 from __future__ import annotations
 from sys import stderr
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from bidict import bidict
 from colorama import Fore, init
 import json
@@ -43,11 +43,7 @@ class headersDependency:
         return sum([0 if len(self.__dict__[key]) == 0 else 1 for key in ["local", "library"]])
 
     def __repr__(self) -> str:
-        res = dict()
-        for key in ["library", "local"]:
-            if self.__dict__[key] and len(self.__dict__[key]) != 0:
-                res.update({key: self.__dict__[key]})
-        return str(res)
+        return str(vars(self))
 
 
 class modulesDependency:
@@ -65,42 +61,58 @@ class modulesDependency:
         self.local = self.library.union(newDeps.local)
 
     def __repr__(self) -> str:
-        res = dict()
-        for key in ["module", "library", "local"]:
-            if self.__dict__[key] and len(self.__dict__[key]) != 0:
-                res.update({key: self.__dict__[key]})
-        return str(res)
+        return str(vars(self))
+
+
+class sourcesDependency:
+    def __init__(self, sources: set[str]) -> None:
+        '''
+        To root
+        '''
+        self.sources = sources
+
+    def unionWith(self, newDeps: sourcesDependency):
+        self.sources = self.sources.union(newDeps.sources)
+
+    def __repr__(self) -> str:
+        return str(vars(self))
 
 
 class dependency:
-    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, time: Optional[float] = None) -> None:
+    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, sources: Optional[sourcesDependency] = None, time: Optional[float] = None) -> None:
         self.headers = headers if headers else headersDependency(set(), set())
         self.modules = modules if modules else modulesDependency(
             set(), set(), set())
         self.provided = provided
+        self.sources = sources if sources else sourcesDependency(set())
         self.time = time
         assert not provided or re.fullmatch("[\w.:]*", provided)
         assert time
 
     def __repr__(self) -> str:
-        res = dict()
-        for key in ["headers", "modules", "provided", "time"]:
-            if self.__dict__[key] and len(self.__dict__[key]) != 0:
-                res.update({key: self.__dict__[key]})
-        return str(res)
+        return str(vars(self))
 
 
 class encoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, dependency):
-            return {"headers": obj.headers, "modules": obj.modules, "provided": obj.provided, "time": obj.time}
+            return vars(obj)
         elif isinstance(obj, modulesDependency):
-            return {"module": obj.module, "library": obj.library, "local": obj.local}
+            return vars(obj)
         elif isinstance(obj, headersDependency):
-            return {"library": obj.library, "local": obj.local}
+            return vars(obj)
+        elif isinstance(obj, sourcesDependency):
+            return vars(obj)
         elif isinstance(obj, set):
             return list(obj)
         return json.JSONEncoder.default(self, obj)
+
+
+class extensionMapper:
+    def __init__(self, headers: set[str], sources: set[str], head_source_pairs: dict[str, str]) -> None:
+        self.headers = headers
+        self.sources = sources
+        self.head_source_pairs = head_source_pairs
 
 
 # module name <--> relative path to current directory
@@ -112,7 +124,7 @@ global depsDict
 depsDict: dict[str, dependency] = dict()
 
 
-def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str) -> modulesDependency:
+def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper) -> tuple[modulesDependency, sourcesDependency]:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
         skip = False
@@ -128,10 +140,12 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
                 skip = True
         if not skip:
             depsDict[relSrcToRoot] = scanFileDependencies(
-                relSrcToCur, verbosity, encoding)
+                relSrcToCur, relRootToCur, verbosity, encoding, ext)
+
         relSrcDirToRoot = path.dirname(relSrcToRoot)
         imported = depsDict[relSrcToRoot].modules
         exported = depsDict[relSrcToRoot].provided
+        sources = depsDict[relSrcToRoot].sources
         if exported:
             modulesBiDict.update({exported: relSrcToRoot})
         for relIncludedToSrc in depsDict[relSrcToRoot].headers.local:
@@ -140,22 +154,27 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
                 path.join(relSrcDirToRoot, relIncludedToSrc))
             relIncludedToCur = path.relpath(
                 path.join(relRootToCur, relIncludedToRoot))
-            newDeps = recursiveScanLocalDependencies(
-                relIncludedToCur, relRootToCur, verbosity, encoding)
+            newImported, newSources = recursiveScanLocalDependencies(
+                relIncludedToCur, relRootToCur, verbosity, encoding, ext)
 
-            imported.unionWith(newDeps)
-        return imported
+            imported.unionWith(newImported)
+            sources.unionWith(newSources)
+        return imported, sources
     except:
         print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, stderr)
         raise
 
 
-def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> dependency:
-    if not path.exists(filename):
-        raise Exception("Unexistent file \"{}\" referenced.".format(filename))
-    with open(filename, encoding=encoding) as file:
+def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, encoding: str, ext: extensionMapper) -> dependency:
+    if not path.exists(relSrcToCur):
+        raise Exception(
+            "Unexistent file \"{}\" referenced.".format(relSrcToCur))
+
+    relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
+
+    with open(relSrcToCur, encoding=encoding) as file:
         if verbosity >= 1:
-            print(BLUE + "Scanning file \"{}\"".format(filename) + RESET)
+            print(BLUE + "Scanning file \"{}\"".format(relSrcToCur) + RESET)
         global content
         content = file.read()
 
@@ -166,6 +185,21 @@ def scanFileDependencies(filename: str, verbosity: int, encoding: str) -> depend
                 print(content[:next_index])
             content = content[next_index+1:]
         info: dependency = dependency(time=time.time())
+
+        relSrcSplitedHeadToCur, extName = path.splitext(relSrcToCur)
+        if extName in ext.headers:
+            for srcExtName in ext.sources:
+                relSrcMappedSrcToCur = relSrcSplitedHeadToCur + srcExtName
+                if path.exists(relSrcMappedSrcToCur):
+                    info.sources.sources.add(
+                        path.relpath(relSrcMappedSrcToCur, relRootToCur))
+        if extName in ext.head_source_pairs.keys():
+            mappedExt = ext.head_source_pairs[extName]
+            relSrcMappedSrcToCur = relSrcSplitedHeadToCur + mappedExt
+            if path.exists(relSrcMappedSrcToCur):
+                info.sources.sources.add(
+                    path.relpath(relSrcMappedSrcToCur, relRootToCur))
+
         while True:
             # Optimizable
             a, b, c, d, e, f, g = (content.find(s)
@@ -308,15 +342,27 @@ def loadCache(relRootToCur: str):
     if path.exists(relCacheToCur):
         try:
             with open(relCacheToCur) as cache:
-                s: dict[str, dict[str, Union[str, list[str]]]
-                        ] = json.load(cache)
+                s: dict[
+                    str, dict[str,
+                              Any
+                              #Union[str, dict[str, list[str]]]
+                              ]
+                ] = json.load(cache)
                 for source, dep in s.items():
+                    headers: dict[str, list[str]] = dep["headers"]
+                    modules: dict[str, list[str]] = dep["modules"]
+                    sources: dict[str, list[str]] = dep["sources"]
                     depsDict.update({source: dependency(
-                        headersDependency(set(dep["headers"]["library"]), set(
-                            dep["headers"]["local"])),
-                        modulesDependency(set(dep["modules"]["module"]), set(
-                            dep["modules"]["library"]), set(dep["modules"]["local"])),
+                        headersDependency(
+                            set(headers["library"]), set(headers["local"])
+                        ),
+                        modulesDependency(
+                            set(modules["module"]),
+                            set(modules["library"]),
+                            set(modules["local"])
+                        ),
                         dep["provided"],
+                        sourcesDependency(set(sources["sources"])),
                         dep["time"])})
         except Exception as e:
             print("Original cache is not correct for reason below. Deleting.")
