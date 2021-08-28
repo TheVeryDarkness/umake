@@ -4,18 +4,21 @@ cmake_minimum_required(VERSION 3.0)
 include(CheckCXXCompilerFlag)
 set(CXX_DEFINITION_HEAD -D)
 if(MSVC)
+    # See https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
+    # See https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5050
+    # I don't know whether there is a possibility that one doesn't add "/EHsc".
+    # MT, or MD, that's a question
+    set(CXX_MODULES_FOR_CHECK /experimental:module)
+    set(CXX_MODULES_FLAGS /nologo /experimental:module /std:c++20)
+    set(CXX_PRECOMPILED_MODULES_EXT ifc)
+    set(CXX_MODULES_CREATE_FLAGS -c)
+
     if(MSVC_VERSION LESS 1928)
-        set(CXX_MODULES_FOR_CHECK /experimental:module)
-        set(CXX_MODULES_FLAGS /experimental:module /module:interface)
-        set(CXX_PRECOMPILED_MODULES_EXT ifc)
-        set(CXX_MODULES_CREATE_FLAGS -c)
+        list(APPEND CXX_MODULES_FLAGS /module:interface)
         set(CXX_MODULES_USE_FLAG /module:reference)
         set(CXX_MODULES_OUTPUT_FLAG /module:output)
     else()
-        set(CXX_MODULES_FOR_CHECK /experimental:module)
-        set(CXX_MODULES_FLAGS /nologo /experimental:module /std:c++20 /interface)
-        set(CXX_PRECOMPILED_MODULES_EXT ifc)
-        set(CXX_MODULES_CREATE_FLAGS -c)
+        list(APPEND CXX_MODULES_FLAGS /interface)
         set(CXX_MODULES_USE_FLAG /reference)
         set(CXX_MODULES_OUTPUT_FLAG /ifcOutput)
     endif()
@@ -41,19 +44,19 @@ function (target_enable_cxx_modules TARGET)
 endfunction ()
 
 # Create an executable with C++ support
-function (add_module_executable TARGET)
+function(add_module_executable TARGET)
     add_executable(${TARGET} ${ARGN})
     target_enable_cxx_modules(${TARGET})
 endfunction ()
 
-function (handle_module_reference ESCAPED_TARGET ESCAPED_REFERENCE)
+function(handle_module_reference ESCAPED_TARGET ESCAPED_REFERENCE)
     # message("${ESCAPED_TARGET} refer to ${ESCAPED_REFERENCE}")
     get_target_property(INTERFACE_TARGET ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_TARGET)
     add_dependencies(${ESCAPED_TARGET} ${INTERFACE_TARGET})
 endfunction()
 
 ## Create C++ module interface.
-## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+## add_module(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
 ## Set target property below:
 ##  CXX_MODULE_NAME             Unescaped module name
 ##  CXX_MODULE_INTERFACE_FILE   Source file path
@@ -90,14 +93,37 @@ function (add_module TARGET _SOURCE SOURCE)
         list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
     endforeach ()
     
+    # Add definitions and flags to the target
     get_property(compile_definitions DIRECTORY PROPERTY COMPILE_DEFINITIONS)
     foreach(definition IN LISTS compile_definitions)
         list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
     endforeach()
+    get_property(compile_definitions GLOBAL PROPERTY COMPILE_DEFINITIONS)
+    foreach(definition IN LISTS compile_definitions)
+        list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
+    endforeach()
 
-    get_property(options DIRECTORY PROPERTY COMPILE_OPTIONS)
-    list(APPEND cmd ${options})
+    separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS})
+    foreach(flag IN LISTS FLAGS)
+        list(APPEND cmd ${flag})
+    endforeach()
 
+    string(TOUPPER ${CMAKE_BUILD_TYPE} UPPER_BUILD_TYPE)
+
+    if(CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE})
+        separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}})
+        foreach(flag IN LISTS FLAGS)
+            list(APPEND cmd ${flag})
+        endforeach()
+    endif()
+    if(CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE})
+        separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}})
+        foreach(flag IN LISTS FLAGS)
+            list(APPEND cmd ${flag})
+        endforeach()
+    endif()
+
+    # Make directory for pre-compiled modules
     get_filename_component(out_file_dir ${out_file} DIRECTORY)
 
     if (out_file_dir)
@@ -135,7 +161,7 @@ function (add_module TARGET _SOURCE SOURCE)
 endfunction ()
 
 ## Link a (C++ module) library to (C++ module) target.
-## target_link_module_libraries(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+## add_moduled_executable(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
 function (add_moduled_executable TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
@@ -177,6 +203,8 @@ function (add_moduled_executable TARGET)
     endforeach ()
 endfunction ()
 
+## Create static libraries that correspond to single source file.
+##  add_object(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
 function(add_object TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
@@ -196,22 +224,14 @@ function(add_object TARGET)
         else()
             list(APPEND ${MODE}S ${TOKEN})
         endif()
-        # message("SOURCES: ${SOURCES}")
-        # message("DEPENDS: ${DEPENDS}")
-        # message("REFERENCES: ${REFERENCES}")
-        # message("ARGN: ${ARGN}")
-        # message("TOKEN: ${TOKEN}")
-        # message("")
     endforeach()
 
     # Enable modules for target
     add_library(${TARGET} STATIC ${SOURCES})
     target_enable_cxx_modules(${TARGET})
 
-    # message("${TARGET} DEPENDS ${DEPENDS}")
     target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
 
-    # message("${TARGET} REFERENCES ${REFERENCES}")
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
         handle_module_reference(${TARGET} ${ESCAPED_REFERENCE})
