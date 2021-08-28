@@ -26,7 +26,7 @@ else() # Any more check?
     set(CXX_MODULES_FOR_CHECK -fmodules)
     set(CXX_MODULES_FLAGS -fmodules -std=c++20)
     set(CXX_PRECOMPILED_MODULES_EXT pcm)
-    set(CXX_MODULES_CREATE_FLAGS -fmodules-ts -x c++-module --precompile)
+    set(CXX_MODULES_CREATE_FLAGS -fmodules -x c++-module --precompile)
     set(CXX_MODULES_USE_FLAG -fmodule-file=)
     set(CXX_MODULES_OUTPUT_FLAG -o)
 endif()
@@ -43,26 +43,20 @@ function (target_enable_cxx_modules TARGET)
     target_compile_options(${TARGET} PRIVATE ${CXX_MODULES_FLAGS})
 endfunction ()
 
-# Create an executable with C++ support
-function(add_module_executable TARGET)
-    add_executable(${TARGET} ${ARGN})
-    target_enable_cxx_modules(${TARGET})
-endfunction ()
-
-function(handle_module_reference ESCAPED_TARGET ESCAPED_REFERENCE)
-    # message("${ESCAPED_TARGET} refer to ${ESCAPED_REFERENCE}")
+# Add module dependencies to the target
+function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
     get_target_property(INTERFACE_TARGET ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_TARGET)
     add_dependencies(${ESCAPED_TARGET} ${INTERFACE_TARGET})
 endfunction()
 
 ## Create C++ module interface.
-## add_module(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
 ## Set target property below:
 ##  CXX_MODULE_NAME             Unescaped module name
 ##  CXX_MODULE_INTERFACE_FILE   Source file path
 ##  CXX_MODULE_INTERFACE_TARGET Escaped names
 ##  CXX_MODULE_REFERENCES       Escaped names of referenced modules
-function (add_module TARGET _SOURCE SOURCE)
+function (add_module_library TARGET _SOURCE SOURCE)
     # Set cmake to use CXX compiler on C++ module files
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
@@ -140,7 +134,7 @@ function (add_module TARGET _SOURCE SOURCE)
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-        handle_module_reference(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+        target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
     endforeach ()
 
     # Store property with interface file
@@ -154,7 +148,8 @@ function (add_module TARGET _SOURCE SOURCE)
 endfunction ()
 
 ## Link a (C++ module) library to (C++ module) target.
-## add_moduled_executable(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+##  add_moduled_executable(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+##  Both DEPEND and REFERENCE are target names
 function (add_moduled_executable TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
@@ -186,7 +181,60 @@ function (add_moduled_executable TARGET)
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-        handle_module_reference(${TARGET} ${ESCAPED_REFERENCE})
+        target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
+        get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
+        get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
+        # Avoid de-duplication
+        target_compile_options(${TARGET} 
+            PRIVATE "SHELL:${CXX_MODULES_USE_FLAG} ${MODULENAME}=${CMAKE_CURRENT_BINARY_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+        )
+    endforeach ()
+endfunction ()
+
+## Link a (C++ module) library to (C++ module) target.
+##  add_moduled_executable(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+##  Both DEPEND and REFERENCE are target names
+function (add_moduled_library TARGET)
+    if(NOT ${_SOURCE} STREQUAL SOURCE)
+        message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
+    endif()
+    
+    set(SOURCES)
+    set(DEPENDS)
+    set(REFERENCES)
+    set(MODE SOURCE)
+    set(TYPE)
+    foreach(TOKEN IN LISTS ARGN)
+        if(${TOKEN} STREQUAL STATIC)
+            set(TYPE ${TOKEN})
+        elseif(${TOKEN} STREQUAL SHARED)
+            set(TYPE ${TOKEN})
+        elseif(${TOKEN} STREQUAL MODULE)
+            set(TYPE ${TOKEN})
+        elseif(${TOKEN} STREQUAL OBJECT)
+            set(TYPE ${TOKEN})
+        elseif(${TOKEN} STREQUAL SOURCE)
+            set(MODE ${TOKEN})
+        elseif(${TOKEN} STREQUAL DEPEND)
+            set(MODE ${TOKEN})
+        elseif(${TOKEN} STREQUAL REFERENCE)
+            set(MODE ${TOKEN})
+        else()
+            list(APPEND ${MODE}S ${TOKEN})
+        endif()
+    endforeach()
+
+    # Enable modules for target
+    add_library(${TARGET} ${TYPE})
+    target_sources(${TARGET} PRIVATE ${SOURCES})
+    target_enable_cxx_modules(${TARGET})
+    
+    add_dependencies(${TARGET} ${DEPENDS})
+    target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
+
+    foreach (REFERENCE IN LISTS REFERENCES)
+        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
@@ -197,8 +245,9 @@ function (add_moduled_executable TARGET)
 endfunction ()
 
 ## Create static libraries that correspond to single source file.
-##  add_object(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
-function(add_object TARGET)
+##  add_source_file_target(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+##  Both DEPEND and REFERENCE are target names
+function(add_source_file_target TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
     endif()
@@ -227,7 +276,7 @@ function(add_object TARGET)
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-        handle_module_reference(${TARGET} ${ESCAPED_REFERENCE})
+        target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
@@ -237,24 +286,44 @@ function(add_object TARGET)
     endforeach ()
 endfunction()
 
-function(execute_umake_command command)
+function(execute_umake_command_for_executable command)
+    # Run "cmake --help-policy CMP0054" for help
+    cmake_policy(SET CMP0054 NEW)
     string(REPLACE "\\" "/" command ${command})
     string(REGEX MATCHALL "[0-9/:._a-zA-Z-]+" cmds "${command}")
     list(POP_FRONT cmds head)
     if("MODULE" STREQUAL ${head})
-        add_module(${cmds})
-    elseif("EXECUTABLE" STREQUAL ${head})
+        add_module_library(${cmds})
+    elseif("TARGET" STREQUAL ${head})
         add_moduled_executable(${cmds})
     elseif("OBJECT" STREQUAL ${head})
-        add_object(${cmds})
+        add_source_file_target(${cmds})
     else()
         message(FATAL_ERROR "Failed to parse the result of umake. \"${head}\" is not a correct target type.")
     endif()
 endfunction()
 
-# umake should be downloaded first
-function(add_main_source)
-    math(EXPR ODD "${ARGC}%2")
+function(execute_umake_command_for_library command)
+    # Run "cmake --help-policy CMP0054" for help
+    cmake_policy(SET CMP0054 NEW)
+    string(REPLACE "\\" "/" command ${command})
+    string(REGEX MATCHALL "[0-9/:._a-zA-Z-]+" cmds "${command}")
+    list(POP_FRONT cmds head)
+    if("MODULE" STREQUAL ${head})
+        add_module_library(${cmds})
+    elseif("TARGET" STREQUAL ${head})
+        add_moduled_library(${cmds})
+    elseif("OBJECT" STREQUAL ${head})
+        add_source_file_target(${cmds})
+    else()
+        message(FATAL_ERROR "Failed to parse the result of umake. \"${head}\" is not a correct target type.")
+    endif()
+endfunction()
+
+function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
+    # Check if ARGC is odd.
+    # Odd ARGC means path to umake.py is specified
+    math(EXPR ODD "(${ARGC}-1)%2")
     if(ODD)
         list(POP_FRONT ARGN UMAKE_PATH)
     else()
@@ -270,7 +339,43 @@ function(add_main_source)
         OUTPUT_VARIABLE RESULT
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
+    set(${OUT} ${RESULT} PARENT_SCOPE)
+endfunction()
+
+# add_moduled_executable_with_a_main_source_file([UMAKE_PATH] [<TARGET_NAME1> <SOURCE1> [<TARGET_NAME2> <SOURCE2>]...])
+function(add_moduled_executables_with_a_main_source)
+    EXECUTE_UMAKE_PY_FOR_DEPENDENCIES(RESULT ${ARGN})
     foreach(cmd IN LISTS RESULT)
-        execute_umake_command(${cmd})
+        execute_umake_command_for_executable(${cmd})
+    endforeach(cmd)
+endfunction()
+
+# add_moduled_library_with_a_main_source_file([UMAKE_PATH] [<TARGET_NAME1> <SOURCE1> [<TARGET_NAME2> <SOURCE2>]...])
+function(add_moduled_library_with_a_main_source)
+    set(TYPE)
+    list(FIND ARGN STATIC MODE_INDEX)
+    if(${MODE_INDEX} GREATER_EQUAL 0)
+        set(TYPE STATIC)
+        list(REMOVE_AT ARGN ${MODE_INDEX})
+    endif()
+    list(FIND ARGN SHARED MODE_INDEX)
+    if(${MODE_INDEX} GREATER_EQUAL 0)
+        set(TYPE SHARED)
+        list(REMOVE_AT ARGN ${MODE_INDEX})
+    endif()
+    list(FIND ARGN MODULE MODE_INDEX)
+    if(${MODE_INDEX} GREATER_EQUAL 0)
+        set(TYPE MODULE)
+        list(REMOVE_AT ARGN ${MODE_INDEX})
+    endif()
+    list(FIND ARGN OBJECT MODE_INDEX)
+    if(${MODE_INDEX} GREATER_EQUAL 0)
+        set(TYPE OBJECT)
+        list(REMOVE_AT ARGN ${MODE_INDEX})
+    endif()
+
+    EXECUTE_UMAKE_PY_FOR_DEPENDENCIES(RESULT ${ARGN})
+    foreach(cmd IN LISTS RESULT)
+        execute_umake_command_for_library(${cmd} ${TYPE})
     endforeach(cmd)
 endfunction()

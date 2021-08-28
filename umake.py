@@ -228,7 +228,7 @@ def main():
                         print('MODULE', modulesBiDict.inverse[source], 'SOURCE',
                               end=' ')
                     elif source in relSourcesToRoot:
-                        print('EXECUTABLE', targetsBidict.inverse[source], "SOURCE",
+                        print('TARGET', targetsBidict.inverse[source], "SOURCE",
                               end=' ')
                     else:
                         if not autoObj:
