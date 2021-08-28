@@ -16,6 +16,8 @@ import somemodule;
 #endif
 ~~~
 
+Avoid double underlines in filename if you enable auto object dependencies detection, which is used for escaped of slash and bach-slash.
+
 ## usage
 
 First, you should clone this reposity or just download it.

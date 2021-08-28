@@ -202,11 +202,6 @@ def main():
                         print(
                             YELLOW+"Module \"{}\" imported from \"{}\" is not found.".format(imported, _source)+RESET)
 
-        for module in modulesBiDict.keys():
-            if '_' in module:
-                if verbosity >= 1:
-                    print(YELLOW + "Avoid _ in module name" + RESET)
-
         if target == "info-only":
             print(GREEN + str(modulesToBePreCompiledBySources) + RESET)
             print(BLUE + str(modulesBiDict) + RESET)

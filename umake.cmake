@@ -109,13 +109,6 @@ function (add_module TARGET _SOURCE SOURCE)
     endforeach()
 
     string(TOUPPER ${CMAKE_BUILD_TYPE} UPPER_BUILD_TYPE)
-
-    if(CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE})
-        separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}})
-        foreach(flag IN LISTS FLAGS)
-            list(APPEND cmd ${flag})
-        endforeach()
-    endif()
     if(CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE})
         separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}})
         foreach(flag IN LISTS FLAGS)
