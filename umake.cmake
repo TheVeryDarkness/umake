@@ -76,7 +76,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
 
     # TODO: CXX flags might be different
     set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${in_file} ${CXX_MODULES_OUTPUT_FLAG} ${out_file})
-    
+
     set(ESCAPED_REFERENCES)
 
     foreach (REFERENCE IN LISTS REFERENCES)
@@ -86,7 +86,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         list(APPEND cmd ${CXX_MODULES_USE_FLAG}"${NAME}=${CMAKE_CURRENT_BINARY_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT}")
         list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
     endforeach ()
-    
+
     # Add definitions and flags to the target
     get_property(compile_definitions DIRECTORY PROPERTY COMPILE_DEFINITIONS)
     foreach(definition IN LISTS compile_definitions)
@@ -124,7 +124,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         DEPENDS ${in_file} ${ESCAPED_REFERENCES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-    
+
     # Create interface build target
     add_custom_target(${ESCAPED_TARGET}
         COMMAND ${cmd}
@@ -154,7 +154,7 @@ function (add_moduled_executable TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
     endif()
-    
+
     set(SOURCES)
     set(DEPENDS)
     set(REFERENCES)
@@ -175,7 +175,7 @@ function (add_moduled_executable TARGET)
     add_executable(${TARGET})
     target_sources(${TARGET} PRIVATE ${SOURCES})
     target_enable_cxx_modules(${TARGET})
-    
+
     add_dependencies(${TARGET} ${DEPENDS})
     target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
 
@@ -185,7 +185,7 @@ function (add_moduled_executable TARGET)
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
-        target_compile_options(${TARGET} 
+        target_compile_options(${TARGET}
             PRIVATE "SHELL:${CXX_MODULES_USE_FLAG} ${MODULENAME}=${CMAKE_CURRENT_BINARY_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
         )
     endforeach ()
@@ -198,7 +198,7 @@ function (add_moduled_library TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
     endif()
-    
+
     set(SOURCES)
     set(DEPENDS)
     set(REFERENCES)
@@ -228,7 +228,7 @@ function (add_moduled_library TARGET)
     add_library(${TARGET} ${TYPE})
     target_sources(${TARGET} PRIVATE ${SOURCES})
     target_enable_cxx_modules(${TARGET})
-    
+
     add_dependencies(${TARGET} ${DEPENDS})
     target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
 
@@ -238,7 +238,7 @@ function (add_moduled_library TARGET)
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
-        target_compile_options(${TARGET} 
+        target_compile_options(${TARGET}
             PRIVATE "SHELL:${CXX_MODULES_USE_FLAG} ${MODULENAME}=${CMAKE_CURRENT_BINARY_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
         )
     endforeach ()
@@ -251,7 +251,7 @@ function(add_source_file_target TARGET)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
     endif()
-    
+
     set(SOURCES)
     set(DEPENDS)
     set(REFERENCES)
@@ -280,7 +280,7 @@ function(add_source_file_target TARGET)
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
-        target_compile_options(${TARGET} 
+        target_compile_options(${TARGET}
             PRIVATE "SHELL:${CXX_MODULES_USE_FLAG} ${MODULENAME}=${CMAKE_CURRENT_BINARY_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
         )
     endforeach ()
