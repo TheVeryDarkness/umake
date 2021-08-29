@@ -26,3 +26,5 @@ add_moduled_executables_with_a_main_source("../umake/umake.py" main main.cpp tes
 如果在当前目录下生成过配置文件，则路径名是可选的。
 
 模块化的库（不是模块库）未经测试。
+
+如果您很不巧地删除了预编译过的模块接口文件而没有删除对应中间对象文件，错误将几乎必定发生，请您清理并重新编译项目或者删除对应对象文件。

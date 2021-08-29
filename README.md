@@ -38,4 +38,6 @@ Unless you have already run umake.py and let generate a umakeConfig.json on curr
 
 It's recommended that you config umake with umakeConfig.json, which means you can have more umake features with cmake.
 
-Moduled libraries are tested.
+Moduled libraries are not tested.
+
+If you delete a .ifc file without deleting its corresponding object, errors will occurred, you can clean and rebuild all or just delete corresponding object.
