@@ -1,10 +1,10 @@
 # umake
 
-A minimal tool for build system for c++, it can automatically scan the dependencies (but not all dependencies can be found) and add them.
+A minimal tool for build system for c++, it can automatically scan the dependencies (not all dependencies can be found, now only C++20 modules import and intermediate objects) and add them.
 
 As umake will cache the scanning results, you may want to delete it or disable it, should it caused errors. Configurations are supported but not enabled by default.
 
-But well, now it only provides an extension for cmake.
+But well, now it only provides an extension for cmake. And not all compilers support cpp modules.
 
 ## notice 
 
