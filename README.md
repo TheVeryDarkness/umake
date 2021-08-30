@@ -41,3 +41,5 @@ It's recommended that you config umake with umakeConfig.json, which means you ca
 Moduled libraries are not tested.
 
 If you delete a .ifc file without deleting its corresponding object, errors will occurred, you can clean and rebuild all or just delete corresponding object.
+
+And if you use some generators other than Ninja, you may meet errors. If you don't like Ninja, you can try v0.0.0 version for higher compatibility.
