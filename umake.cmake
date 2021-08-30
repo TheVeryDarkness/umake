@@ -3,7 +3,9 @@
 # For ADDITIONAL_CLEAN_FILES
 cmake_minimum_required(VERSION 3.15)
 
-message({CMAKE_GENERATOR})
+if(NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
+    message("Errors may occur if using \"${CMAKE_GENERATOR}\" as generator. I'm trying to fix them, but Ninja should work for you.")
+endif()
 
 include(CheckCXXCompilerFlag)
 set(CXX_DEFINITION_HEAD -D)
