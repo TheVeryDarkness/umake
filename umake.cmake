@@ -10,6 +10,7 @@ endif()
 include(CheckCXXCompilerFlag)
 set(CXX_DEFINITION_HEAD -D)
 set(CXX_PRECOMPILED_MODULES_DIR ${CMAKE_CURRENT_BINARY_DIR}/.cppm)
+set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE FALSE)
 if(MSVC)
     # See https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
     # See https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5050
@@ -19,6 +20,10 @@ if(MSVC)
     set(CXX_MODULES_FLAGS /nologo /experimental:module /std:c++20)
     set(CXX_PRECOMPILED_MODULES_EXT ifc)
     set(CXX_MODULES_CREATE_FLAGS -c)
+    set(CXX_MODULES_SPECIFY_MODULE_NAME TRUE)
+    if(${CMAKE_GENERATOR} STREQUAL "Ninja")
+        set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE TRUE)
+    endif()
 
     if(MSVC_VERSION LESS 1928)
         list(APPEND CXX_MODULES_FLAGS /module:interface)
@@ -52,22 +57,24 @@ endfunction ()
 
 # Add module dependencies to the target
 function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
-    target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
+    # target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
     add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
 endfunction()
 
 function(add_object_dependency SOURCE REFERENCE)
-    get_target_property(INTERFACE_FILE ${REFERENCE} CXX_MODULE_INTERFACE_FILE)
-    get_source_file_property(INTERFACE_DEPENDS ${SOURCE} OBJECT_DEPENDS)
+    if(CXX_MODULES_PRECOMPILE_WHEN_COMPILE)
+        get_target_property(INTERFACE_FILE ${REFERENCE} CXX_MODULE_INTERFACE_FILE)
+        get_source_file_property(INTERFACE_DEPENDS ${SOURCE} OBJECT_DEPENDS)
 
-    set(NEW_OBJECT_DEPEND "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${REFERENCE}.dir/${INTERFACE_FILE}${CMAKE_CXX_OUTPUT_EXTENSION}")
+        set(NEW_OBJECT_DEPEND "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${REFERENCE}.dir/${INTERFACE_FILE}${CMAKE_CXX_OUTPUT_EXTENSION}")
 
-    if(NOT INTERFACE_DEPENDS)
-        set(INTERFACE_DEPENDS ${NEW_OBJECT_DEPEND})
-    else()
-        string(APPEND INTERFACE_DEPENDS ";${NEW_OBJECT_DEPEND}")
+        if(NOT INTERFACE_DEPENDS)
+            set(INTERFACE_DEPENDS ${NEW_OBJECT_DEPEND})
+        else()
+            string(APPEND INTERFACE_DEPENDS ";${NEW_OBJECT_DEPEND}")
+        endif()
+        set_property(SOURCE ${SOURCE} PROPERTY OBJECT_DEPENDS ${INTERFACE_DEPENDS})
     endif()
-    set_property(SOURCE ${SOURCE} PROPERTY OBJECT_DEPENDS ${INTERFACE_DEPENDS})
 endfunction()
 
 ## Create C++ module interface.
@@ -103,9 +110,70 @@ function (add_module_library TARGET _SOURCE SOURCE)
     if (OUT_FILE_DIR)
         file(MAKE_DIRECTORY ${OUT_FILE_DIR})
     endif()
-
-    # Create interface build target
-    add_library(${ESCAPED_TARGET} OBJECT ${SOURCE})
+    if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
+        # Create interface build target
+        add_library(${ESCAPED_TARGET} OBJECT ${SOURCE})
+        foreach (REFERENCE IN LISTS REFERENCES)
+            string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+            target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+            get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
+            get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
+            # Avoid de-duplication
+            target_compile_options(${ESCAPED_TARGET}
+                PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            )
+            add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
+        endforeach ()
+        target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_OUTPUT_FLAG} "${OUT_FILE}")
+    else()
+        # TODO: CXX flags might be different
+        set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE} ${CXX_MODULES_OUTPUT_FLAG} ${OUT_FILE})
+        set(ESCAPED_REFERENCES)
+        foreach (REFERENCE IN LISTS REFERENCES)
+            string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+            get_target_property(FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
+            get_target_property(NAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
+            list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG}"${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT}")
+            list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
+        endforeach ()
+        # Add definitions and flags to the target
+        get_property(compile_definitions DIRECTORY PROPERTY COMPILE_DEFINITIONS)
+        foreach(definition IN LISTS compile_definitions)
+            list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
+        endforeach()
+        get_property(compile_definitions GLOBAL PROPERTY COMPILE_DEFINITIONS)
+        foreach(definition IN LISTS compile_definitions)
+            list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
+        endforeach()
+        separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS})
+        foreach(flag IN LISTS FLAGS)
+            list(APPEND cmd ${flag})
+        endforeach()
+        if(CMAKE_BUILD_TYPE)
+            string(TOUPPER ${CMAKE_BUILD_TYPE} UPPER_BUILD_TYPE)
+            if(CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE})
+                separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}})
+                foreach(flag IN LISTS FLAGS)
+                    list(APPEND cmd ${flag})
+                endforeach()
+            endif()
+        endif()
+        add_custom_command(
+            OUTPUT ${OUT_FILE}
+            COMMAND ${cmd}
+            DEPENDS ${IN_FILE} ${ESCAPED_REFERENCES}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+        # Create interface build target
+        add_custom_target(${ESCAPED_TARGET}
+            COMMAND ${cmd}
+            DEPENDS ${OUT_FILE} ${ESCAPED_REFERENCES}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+        foreach (ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
+            target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+        endforeach ()
+    endif()
 
     # Store property with interface file
     set_target_properties(${ESCAPED_TARGET}
@@ -114,19 +182,6 @@ function (add_module_library TARGET _SOURCE SOURCE)
         CXX_MODULE_INTERFACE_FILE "${SOURCE}"
         CXX_MODULE_REFERENCES "${REFERENCES}"
     )
-    set(ESCAPED_REFERENCES)
-    foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-        target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
-        get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
-        get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
-        # Avoid de-duplication
-        target_compile_options(${ESCAPED_TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
-        )
-        add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
-    endforeach ()
-    target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_OUTPUT_FLAG} "${OUT_FILE}")
 
     get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
     if(NOT ${_CLEAN_FILES})
