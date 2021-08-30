@@ -3,9 +3,11 @@
 # For ADDITIONAL_CLEAN_FILES
 cmake_minimum_required(VERSION 3.15)
 
+message({CMAKE_GENERATOR})
+
 include(CheckCXXCompilerFlag)
 set(CXX_DEFINITION_HEAD -D)
-set(CXX_PRECOMPILED_MODULES_DIR ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/.cppm)
+set(CXX_PRECOMPILED_MODULES_DIR ${CMAKE_CURRENT_BINARY_DIR}/.cppm)
 if(MSVC)
     # See https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
     # See https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5050
@@ -122,7 +124,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         )
         add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
     endforeach ()
-    target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_FLAGS} ${CXX_MODULES_OUTPUT_FLAG} \"${OUT_FILE}\")
+    target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_FLAGS} ${CXX_MODULES_OUTPUT_FLAG} "${OUT_FILE}")
 
     get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
     if(NOT ${_CLEAN_FILES})
