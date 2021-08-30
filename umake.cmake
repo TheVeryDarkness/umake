@@ -57,7 +57,10 @@ endfunction ()
 
 # Add module dependencies to the target
 function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
-    # target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
+    if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
+        # Only real libraries can be linked.
+        target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
+    endif()
     add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
 endfunction()
 
