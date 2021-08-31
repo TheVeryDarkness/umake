@@ -45,7 +45,7 @@ def main():
                         help="The main target and its source file to compile and link to.")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Verbosity level. Repeat this option to increase.")
-    parser.add_argument("-r", "--root", type=str, default='.',
+    parser.add_argument("-r", "--root", type=str,
                         help="The root path to generate build file, such as makefile or scripts. Current working directory by default.")
     parser.add_argument("-p", "--project", type=str,
                         help="The path to the source file folder for the project. Every file in this folder may be scanned for module exports. Root by default.")
@@ -87,11 +87,13 @@ def main():
 
     if _loadConfig:
         loadConfig(args, _preferConfig)
-    if _saveConfig:
-        saveConfig(args)
 
+    assert "root" in vars(args)
     if not args.project:
         args.project = args.root
+
+    if _saveConfig:
+        saveConfig(args)
 
     root: str = args.root
     assert path.isdir(root)
@@ -264,13 +266,15 @@ def main():
             generate_ninja(path.join(relRoot, "build.ninja"),
                            modulesToBePreCompiledBySources)
         else:
-            raise Exception("Unknown target")
+            print(depsDict)
+        if not cacheDisabled:
+            saveCache(relRoot)
     except Exception as e:
         print('\t', RED + str(e) + RESET, sep="", file=stderr)
         print(RED + "Failed for parsed arguments: {}.".format(args) +
               RESET, file=stderr)
-    if not cacheDisabled:
-        saveCache(relRoot)
+        if not cacheDisabled:
+            deleteCache(relRoot)
 
 
 if __name__ == "__main__":

@@ -222,7 +222,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
             if g == -1:
                 g = len(content)
 
-            if a == __uniqueMin(a, b, c, d, e, f, g):
+            if a == __uniqueMin(a, b, c, d, e, f, g):  # include
                 content = content[a+len("#include"):]
                 content = content.lstrip()
                 lib = re.search(r"^<[^<>]*>", content)
@@ -243,7 +243,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     info.headers.local.add(_path[1:-1])
                 else:
                     raise Exception("What's being included?")
-            elif b == __uniqueMin(a, b, c, d, e, f, g):
+            elif b == __uniqueMin(a, b, c, d, e, f, g):  # string
                 content = content[b+1:]
                 while True:
                     escape = content.find("\\")
@@ -256,7 +256,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 assert linesep not in content[:next_quote +
                                               1], "Multiline string"
                 drop(next_quote, "Dropping below in string:")
-            elif c == __uniqueMin(a, b, c, d, e, f, g):
+            elif c == __uniqueMin(a, b, c, d, e, f, g):  # character
                 content = content[c+1:]
                 while True:
                     escape = content.find("\\")
@@ -269,8 +269,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 assert linesep not in content[:next_quote +
                                               1], "Multiline character"
                 drop(next_quote, "Dropping below in character:")
-            elif d == __uniqueMin(a, b, c, d, e, f, g):
-                content = content[:d]
+            elif d == __uniqueMin(a, b, c, d, e, f, g):  # comment //
+                content = content[d:]
                 endline = content.find('\n\r')
                 if endline == -1:
                     endline = content.find('\r\n')
@@ -282,11 +282,11 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     drop(len(content)-1, "Drropping below in comment:")
                 else:
                     drop(endline, "Dropping below in comment:")
-            elif e == __uniqueMin(a, b, c, d, e, f, g):
-                content = content[:e]
+            elif e == __uniqueMin(a, b, c, d, e, f, g):  # comment /**/
+                content = content[e:]
                 end_note = content.find('*/')
                 drop(end_note+len('*/'), "Dropping below in multi-line comment:")
-            elif f == __uniqueMin(a, b, c, d, e, f, g):
+            elif f == __uniqueMin(a, b, c, d, e, f, g):  # import
                 content = content[f+len("import"):]
                 next = re.search(r"[^\s]", content)
                 assert next, "Unexpected termination."
@@ -302,10 +302,18 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 elif re.fullmatch(r"\"[^\"]*\"", imported):
                     info.modules.local.add(imported)
                 elif re.fullmatch(r"[\w.:]+", imported):
-                    info.modules.module.add(imported)
+                    if imported.startswith(":"):
+                        assert info.provided, "Importing partition should be written after exporting."
+                        main: str = info.provided
+                        if ":" in main:
+                            semicolon = main.rfind(":")
+                            main = main[:semicolon]
+                        info.modules.module.add(main+imported)
+                    else:
+                        info.modules.module.add(imported)
                 else:
                     raise Exception("What's being imported?")
-            elif g == __uniqueMin(a, b, c, d, e, f, g):
+            elif g == __uniqueMin(a, b, c, d, e, f, g):  # export
                 content = content[g+len("export"):]
                 next = re.search(r"[^\s]", content)
                 assert next, "Unexpected termination."
@@ -335,6 +343,17 @@ CACHE_PATH = "umakeCache.json"
 def saveCache(relRootToCur: str):
     with open(path.join(relRootToCur, CACHE_PATH), 'w') as cache:
         json.dump(depsDict, cache, cls=encoder)
+
+
+def deleteCache(relRootToCur: str):
+    relCacheToCur = path.relpath(path.join(relRootToCur, CACHE_PATH))
+    if path.exists(relCacheToCur):
+        os.remove(relCacheToCur)
+        print(YELLOW+"Root is \"{}\".".format(relRootToCur)+RESET, file=stderr)
+        print(YELLOW+"Cache at \"{}\" deleted.".format(relCacheToCur) +
+              RESET, file=stderr)
+    else:
+        print(YELLOW+"Cache not found."+RESET, file=stderr)
 
 
 def loadCache(relRootToCur: str):
