@@ -72,7 +72,6 @@ def main():
                         help="Extension name pairs of header and sources. Only corresponding sources of scanned headers will be added to object dependencies.")
     parser.add_argument("--save-config", action="store_true",
                         help="Ask umake to generate umakeConfig.json and save configurations.")
-    parser.add_argument_group()
     parser.add_argument("--load-config", action="store_true",
                         help="Ask umake to read and load umakeConfig.json on root. Configuration will be preferred unless not given.")
     parser.add_argument("--prefer-config", action="store_true",

@@ -14,8 +14,6 @@ set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE FALSE)
 if(MSVC)
     # See https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
     # See https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5050
-    # I don't know whether there is a possibility that one doesn't add "/EHsc".
-    # MT, or MD, that's a question
     set(CXX_MODULES_FOR_CHECK /experimental:module)
     set(CXX_MODULES_FLAGS /nologo /experimental:module /std:c++20)
     set(CXX_PRECOMPILED_MODULES_EXT ifc)
@@ -25,6 +23,8 @@ if(MSVC)
         set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE TRUE)
     endif()
 
+    # It's mentioned in CMakeCxxModules(https://github.com/NTSFka/CMakeCxxModules)
+    # I can't find any information in documents.
     if(MSVC_VERSION LESS 1928)
         list(APPEND CXX_MODULES_FLAGS /module:interface)
         set(CXX_MODULES_REFERENCE_FLAG /module:reference)
@@ -392,7 +392,7 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
         endif()
     endif()
     execute_process(
-        COMMAND python ${UMAKE_PATH} --load-config --save-config --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
+        COMMAND python ${UMAKE_PATH} --load-config --save-config --no-cache --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
         OUTPUT_VARIABLE RESULT
         ERROR_VARIABLE ERROR
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
