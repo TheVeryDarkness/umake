@@ -394,8 +394,13 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
     execute_process(
         COMMAND python ${UMAKE_PATH} --load-config --save-config --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
         OUTPUT_VARIABLE RESULT
+        ERROR_VARIABLE ERROR
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
+    if(ERROR)
+        message(${ERROR})
+        message(FATAL_ERROR "Error detected during scanning dependencies.")
+    endif()
     set(${OUT} ${RESULT} PARENT_SCOPE)
 endfunction()
 

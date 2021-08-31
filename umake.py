@@ -26,6 +26,11 @@ def loadConfig(args: argparse.Namespace, preferred: bool):
         for key, value in cfg.items():
             if preferred or key not in vars(args).keys():
                 vars(args)[key] = value
+        if "sources" in cfg.keys():
+            for i in range(len(cfg["sources"])//2):
+                sources = cfg["sources"]
+                sources[2*i+1] = path.relpath(path.join(cfg["root"],
+                                              path.relpath(sources[2*i+1])))
 
 
 def saveConfig(args: argparse.Namespace):

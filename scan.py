@@ -161,7 +161,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
             sources.unionWith(newSources)
         return imported, sources
     except:
-        print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, stderr)
+        print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, file=stderr)
         raise
 
 
