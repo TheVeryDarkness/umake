@@ -17,15 +17,14 @@ def escapeSource(relSrcToRoot: str):
     return relSrcToRoot.replace('/', '__').replace('\\', '__')
 
 
-def loadConfig(args: argparse.Namespace, relRoot: str, preferred: bool):
+def loadConfig(args: argparse.Namespace, relRoot: str):
     configPath = path.join(args.root, CONFIG_PATH)
-    if not path.exists(configPath) and not preferred:
+    if not path.exists(configPath):
         return
     with open(configPath) as config:
         cfg = json.load(config)
         for key, value in cfg.items():
-            if preferred or key not in vars(args).keys() or vars(args)[key] == None:
-                vars(args)[key] = value
+            vars(args)[key] = value
         if "sources" in cfg.keys():
             for i in range(len(cfg["sources"])//2):
                 sources = cfg["sources"]
@@ -76,8 +75,6 @@ def main():
                         help="Ask umake to generate umakeConfig.json and save configurations.")
     parser.add_argument("--load-config", action="store_true",
                         help="Ask umake to read and load umakeConfig.json on root. Configuration will be preferred unless not given.")
-    parser.add_argument("--prefer-config", action="store_true",
-                        help="Configuration will be preferred unless not given.")
     parser.add_argument("--no-cache", action="store_true",
                         help="Disable scanning caches")
     parser.add_argument("--log-update", action="store_true",
@@ -86,7 +83,6 @@ def main():
 
     _loadConfig = args.load_config
     _saveConfig = args.save_config
-    _preferConfig = args.prefer_config
 
     assert "root" in vars(args), "Specify the output dir, please."
     root: str = args.root
@@ -94,7 +90,7 @@ def main():
     relRoot = path.relpath(root)
 
     if _loadConfig:
-        loadConfig(args, relRoot, _preferConfig)
+        loadConfig(args, relRoot)
 
     if not args.project:
         args.project = args.root
