@@ -134,7 +134,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
         if relSrcToRoot in depsDict:
             lastScanTime = depsDict[relSrcToRoot].time
             lastModTime = path.getmtime(relSrcToCur)
-            if lastScanTime < lastModTime:
+            if lastScanTime <= lastModTime:
                 if verbosity >= 2:
                     print(
                         BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
