@@ -392,7 +392,7 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
         endif()
     endif()
     execute_process(
-        COMMAND python ${UMAKE_PATH} --load-config --save-config --no-cache --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
+        COMMAND python ${UMAKE_PATH} --load-config --save-config --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
         OUTPUT_VARIABLE RESULT
         ERROR_VARIABLE ERROR
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}

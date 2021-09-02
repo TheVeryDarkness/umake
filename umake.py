@@ -78,6 +78,8 @@ def main():
                         help="Configuration will be preferred unless not given.")
     parser.add_argument("--no-cache", action="store_true",
                         help="Disable scanning caches")
+    parser.add_argument("--log-update", action="store_true",
+                        help="Log when cache is updated.")
     args = parser.parse_args()
 
     _loadConfig = args.load_config
@@ -115,7 +117,8 @@ def main():
     moduleExtension: list[str] = args.module
     excludeFiles = args.exclude_files
     excludeDirs = args.exclude_dirs
-    cacheDisabled = args.no_cache
+    cacheDisabled: bool = args.no_cache
+    logUpdate: bool = args.log_update
 
     autoObj = not args.no_auto_obj
     extHeaders: set[str] = set(args.ext_header)
@@ -139,7 +142,7 @@ def main():
         for source in sources:
             relSource = path.relpath(source, relRoot)
             modulesToBePreCompiledBySources[relSource], extraSourcesBySources[relSource] = recursiveScanLocalDependencies(
-                source, relRoot, verbosity, encoding, ext)
+                source, relRoot, verbosity, encoding, ext, logUpdate)
         for dir, dirs, files in os.walk(project):
             relDirToCur = path.relpath(dir)
             relDirToRoot = path.relpath(relDirToCur, relRoot)
@@ -171,7 +174,7 @@ def main():
                         )
                     continue
                 modulesToBePreCompiledBySources[relFileToRoot], extraSourcesBySources[relFileToRoot] = recursiveScanLocalDependencies(
-                    relFileToCur, relRoot, verbosity, encoding, ext)
+                    relFileToCur, relRoot, verbosity, encoding, ext, logUpdate)
         if autoObj:
             for extraSourcesBySource in extraSourcesBySources.values():
                 extraSourcesToRoot.unionWith(extraSourcesBySource)
@@ -179,7 +182,7 @@ def main():
                 extraSrcToCur = path.relpath(
                     path.join(relRoot, extraSrcToRoot))
                 modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveScanLocalDependencies(
-                    extraSrcToCur, relRoot, verbosity, encoding, ext)
+                    extraSrcToCur, relRoot, verbosity, encoding, ext, logUpdate)
                 objectsDict[extraSrcToRoot] = escapeSource(extraSrcToRoot)
             updated_one_source = True
             while updated_one_source:
@@ -188,7 +191,7 @@ def main():
                     for extraSrcToRoot in extraSourcesToRoot.sources:
                         if extraSrcToRoot not in extraSourcesBySources.keys():
                             modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveScanLocalDependencies(
-                                relFileToCur, relRoot, verbosity, encoding, ext)
+                                relFileToCur, relRoot, verbosity, encoding, ext, logUpdate)
                             objectsDict[extraSrcToRoot] = escapeSource(
                                 extraSrcToRoot)
                             updated_one_source = True

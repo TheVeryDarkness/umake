@@ -123,21 +123,37 @@ content: str
 global depsDict
 depsDict: dict[str, dependency] = dict()
 
+LOG_PATH = "umakeLog.txt"
 
-def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper) -> tuple[modulesDependency, sourcesDependency]:
+
+def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
+        relLog = path.relpath(path.join(relRootToCur, LOG_PATH))
         skip = False
         if relSrcToRoot in depsDict:
-            if time.time() < path.getmtime(relSrcToCur):
+            lastScanTime = depsDict[relSrcToRoot].time
+            lastModTime = path.getmtime(relSrcToCur)
+            if lastScanTime < lastModTime:
                 if verbosity >= 2:
                     print(
                         BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
+                with open(relLog, 'a') as log:
+                    print(
+                        "{} < {}, \"{}\"".format(lastScanTime, lastModTime, relSrcToCur),
+                        file=log
+                    )
             else:
                 if verbosity >= 3:
                     print(
                         BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
                 skip = True
+        elif logUpdate:
+            with open(relLog, 'a') as log:
+                print(
+                    "Missed, \"{}\"".format(lastScanTime, lastModTime, relSrcToCur),
+                    file=log
+                )
         if not skip:
             depsDict[relSrcToRoot] = scanFileDependencies(
                 relSrcToCur, relRootToCur, verbosity, encoding, ext)
@@ -155,7 +171,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
             relIncludedToCur = path.relpath(
                 path.join(relRootToCur, relIncludedToRoot))
             newImported, newSources = recursiveScanLocalDependencies(
-                relIncludedToCur, relRootToCur, verbosity, encoding, ext)
+                relIncludedToCur, relRootToCur, verbosity, encoding, ext, logUpdate)
 
             imported.unionWith(newImported)
             sources.unionWith(newSources)
