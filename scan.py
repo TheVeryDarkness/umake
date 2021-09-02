@@ -79,13 +79,13 @@ class sourcesDependency:
 
 
 class dependency:
-    def __init__(self, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, sources: Optional[sourcesDependency] = None, time: Optional[float] = None) -> None:
+    def __init__(self, time: float, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, sources: Optional[sourcesDependency] = None) -> None:
+        self.time = time
         self.headers = headers if headers else headersDependency(set(), set())
         self.modules = modules if modules else modulesDependency(
             set(), set(), set())
         self.provided = provided
         self.sources = sources if sources else sourcesDependency(set())
-        self.time = time
         assert not provided or re.fullmatch("[\w.:]*", provided)
         assert time
 
@@ -140,7 +140,8 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
                         BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
                 with open(relLog, 'a') as log:
                     print(
-                        "{} < {}, \"{}\"".format(lastScanTime, lastModTime, relSrcToCur),
+                        "{} < {}, \"{}\"".format(
+                            lastScanTime, lastModTime, relSrcToCur),
                         file=log
                     )
             else:
@@ -151,7 +152,7 @@ def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosit
         elif logUpdate:
             with open(relLog, 'a') as log:
                 print(
-                    "Missed, \"{}\"".format(lastScanTime, lastModTime, relSrcToCur),
+                    "Missed, \"{}\"".format(relSrcToCur),
                     file=log
                 )
         if not skip:
@@ -388,6 +389,7 @@ def loadCache(relRootToCur: str):
                     modules: dict[str, list[str]] = dep["modules"]
                     sources: dict[str, list[str]] = dep["sources"]
                     depsDict.update({source: dependency(
+                        dep["time"],
                         headersDependency(
                             set(headers["library"]), set(headers["local"])
                         ),
@@ -397,8 +399,8 @@ def loadCache(relRootToCur: str):
                             set(modules["local"])
                         ),
                         dep["provided"],
-                        sourcesDependency(set(sources["sources"])),
-                        dep["time"])})
+                        sourcesDependency(set(sources["sources"]))
+                    )})
         except Exception as e:
             print("Original cache is not correct for reason below. Deleting.")
             print(e)

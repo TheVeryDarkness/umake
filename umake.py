@@ -17,24 +17,26 @@ def escapeSource(relSrcToRoot: str):
     return relSrcToRoot.replace('/', '__').replace('\\', '__')
 
 
-def loadConfig(args: argparse.Namespace, preferred: bool):
+def loadConfig(args: argparse.Namespace, relRoot: str, preferred: bool):
     configPath = path.join(args.root, CONFIG_PATH)
     if not path.exists(configPath) and not preferred:
         return
     with open(configPath) as config:
         cfg = json.load(config)
         for key, value in cfg.items():
-            if preferred or key not in vars(args).keys():
+            if preferred or key not in vars(args).keys() or vars(args)[key] == None:
                 vars(args)[key] = value
         if "sources" in cfg.keys():
             for i in range(len(cfg["sources"])//2):
                 sources = cfg["sources"]
-                sources[2*i+1] = path.relpath(path.join(cfg["root"],
+                sources[2*i+1] = path.relpath(path.join(relRoot,
                                               path.relpath(sources[2*i+1])))
 
 
 def saveConfig(args: argparse.Namespace):
     vars(args)["umake.py"] = argv[0]
+    vars(args)["root"] = path.relpath(vars(args)["root"])
+    vars(args)["project"] = path.relpath(vars(args)["project"])
     with open(path.join(args.root, CONFIG_PATH), 'w') as config:
         json.dump(vars(args), config)
 
@@ -86,19 +88,19 @@ def main():
     _saveConfig = args.save_config
     _preferConfig = args.prefer_config
 
-    if _loadConfig:
-        loadConfig(args, _preferConfig)
+    assert "root" in vars(args), "Specify the output dir, please."
+    root: str = args.root
+    assert path.isdir(root)
+    relRoot = path.relpath(root)
 
-    assert "root" in vars(args)
+    if _loadConfig:
+        loadConfig(args, relRoot, _preferConfig)
+
     if not args.project:
         args.project = args.root
 
     if _saveConfig:
         saveConfig(args)
-
-    root: str = args.root
-    assert path.isdir(root)
-    relRoot = path.relpath(root)
 
     assert len(args.sources) % 2 == 0, "Target should match source"
     target_source_pairs: list[tuple[str, str]] = [(args.sources[2*i], path.relpath(args.sources[2*i+1], relRoot))
@@ -114,6 +116,9 @@ def main():
     target: str = args.target
     encoding: str = args.encoding
     project: str = args.project
+    relProjToCur = path.relpath(
+        path.join(relRoot, path.relpath(project))
+    )
     moduleExtension: list[str] = args.module
     excludeFiles = args.exclude_files
     excludeDirs = args.exclude_dirs
@@ -143,7 +148,7 @@ def main():
             relSource = path.relpath(source, relRoot)
             modulesToBePreCompiledBySources[relSource], extraSourcesBySources[relSource] = recursiveScanLocalDependencies(
                 source, relRoot, verbosity, encoding, ext, logUpdate)
-        for dir, dirs, files in os.walk(project):
+        for dir, dirs, files in os.walk(relProjToCur):
             relDirToCur = path.relpath(dir)
             relDirToRoot = path.relpath(relDirToCur, relRoot)
             for excludeDir in excludeDirs:
@@ -189,9 +194,12 @@ def main():
                 updated_one_source = False
                 for source, extraSourcesToRoot in extraSourcesBySources.copy().items():
                     for extraSrcToRoot in extraSourcesToRoot.sources:
+                        extraSrcToCur = path.relpath(
+                            path.join(relRoot, extraSrcToRoot)
+                        )
                         if extraSrcToRoot not in extraSourcesBySources.keys():
                             modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveScanLocalDependencies(
-                                relFileToCur, relRoot, verbosity, encoding, ext, logUpdate)
+                                extraSrcToCur, relRoot, verbosity, encoding, ext, logUpdate)
                             objectsDict[extraSrcToRoot] = escapeSource(
                                 extraSrcToRoot)
                             updated_one_source = True
