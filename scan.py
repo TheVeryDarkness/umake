@@ -86,7 +86,7 @@ class dependency:
             set(), set(), set())
         self.provided = provided
         self.sources = sources if sources else sourcesDependency(set())
-        assert not provided or re.fullmatch("[\w.:]*", provided)
+        assert not provided or re.fullmatch(r"[\w.:]*", provided)
         assert time
 
     def __repr__(self) -> str:
@@ -122,72 +122,148 @@ global content
 content: str
 global depsDict
 depsDict: dict[str, dependency] = dict()
+global parDict
+parDict: dict[str, set[str]] = dict()
 
 LOG_PATH = "umakeLog.txt"
 
+global calculatedDependencies
+calculatedDependencies: dict[str, tuple[modulesDependency, sourcesDependency]] = dict()
 
-def recursiveScanLocalDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
+
+def __collectDependencies(relFileToRoot: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
+    if relFileToRoot in calculatedDependencies:
+        return calculatedDependencies[relFileToRoot]
+    relFileToCur = path.relpath(
+        path.join(relRootToCur, relFileToRoot))
+    newImported, newSources = recursiveCollectDependencies(
+        relFileToCur, relRootToCur, verbosity, encoding, ext, logUpdate)
+    return newImported, newSources
+
+
+def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
-        relLog = path.relpath(path.join(relRootToCur, LOG_PATH))
-        skip = False
-        if relSrcToRoot in depsDict:
-            lastScanTime = depsDict[relSrcToRoot].time
-            lastModTime = path.getmtime(relSrcToCur)
-            if lastScanTime <= lastModTime:
-                if verbosity >= 2:
-                    print(
-                        BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
-                with open(relLog, 'a') as log:
-                    print(
-                        "{} < {}, \"{}\"".format(
-                            lastScanTime, lastModTime, relSrcToCur),
-                        file=log
-                    )
-            else:
-                if verbosity >= 3:
-                    print(
-                        BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
-                skip = True
-        elif logUpdate:
-            with open(relLog, 'a') as log:
-                print(
-                    "Missed, \"{}\"".format(relSrcToCur),
-                    file=log
-                )
-        if not skip:
-            depsDict[relSrcToRoot] = scanFileDependencies(
-                relSrcToCur, relRootToCur, verbosity, encoding, ext)
 
         relSrcDirToRoot = path.dirname(relSrcToRoot)
-        imported = depsDict[relSrcToRoot].modules
-        exported = depsDict[relSrcToRoot].provided
-        sources = depsDict[relSrcToRoot].sources
-        if exported:
-            modulesBiDict.update({exported: relSrcToRoot})
+        deps = depsDict[relSrcToRoot]
+        importedModules = deps.modules
+        dependedSources = deps.sources
         for relIncludedToSrc in depsDict[relSrcToRoot].headers.local:
             assert not path.isabs(relIncludedToSrc)
             relIncludedToRoot = path.relpath(
                 path.join(relSrcDirToRoot, relIncludedToSrc))
-            relIncludedToCur = path.relpath(
-                path.join(relRootToCur, relIncludedToRoot))
-            newImported, newSources = recursiveScanLocalDependencies(
-                relIncludedToCur, relRootToCur, verbosity, encoding, ext, logUpdate)
+            newImported, newSources = __collectDependencies(
+                relIncludedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
 
-            imported.unionWith(newImported)
-            sources.unionWith(newSources)
-        return imported, sources
+            importedModules.unionWith(newImported)
+            dependedSources.unionWith(newSources)
+        if deps.provided != None:
+            provided = deps.provided
+            assert provided, "Oops!"
+            for imported in deps.modules.module:
+                if ':' in imported:
+                    if imported.startswith(':'):
+                        if ':' in provided:
+                            provided = provided[provided.find(':'):]
+                        imported = provided+':'+imported
+                    assert imported in modulesBiDict, "Importing {} from {}, but it's not found.".format(
+                        imported, relSrcToCur)
+                    relImportedToRoot = modulesBiDict[imported]
+                    newImported, newSources = __collectDependencies(
+                        relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+
+                    importedModules.unionWith(newImported)
+                    dependedSources.unionWith(newSources)
+        for imported in deps.modules.module:
+            if ':' not in imported:
+                relImportedToRoot = modulesBiDict[imported]
+                newImported, newSources = __collectDependencies(
+                    relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+
+                importedModules.unionWith(newImported)
+                dependedSources.unionWith(newSources)
+
+        calculatedDependencies[relSrcToRoot] = (
+            importedModules, dependedSources)
+        return importedModules, dependedSources
     except:
         print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, file=stderr)
         raise
 
 
-def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, encoding: str, ext: extensionMapper) -> dependency:
+def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], excludeDirs: set[str], encoding, extMapper: extensionMapper, moduleExtension: set[str], verbosity: int, logUpdate: bool) -> None:
+    for dir, dirs, files in os.walk(relProjToCur):
+        relDirToCur = path.relpath(dir)
+        relDirToRoot = path.relpath(relDirToCur, relRootToCur)
+        for excludeDir in excludeDirs:
+            if path.exists(relDirToRoot) and path.exists(excludeDir) and path.samefile(relDirToRoot, excludeDir):
+                if verbosity >= 4:
+                    print(
+                        "Walked-through dir \"{}\" is excluded as it matches \"{}\"."
+                        .format(relDirToCur, excludeDir)
+                    )
+                continue
+        for file in files:
+            nothing, extName = path.splitext(file)
+            relFileToCur = path.relpath(path.join(dir, file))
+            relFileToRoot = path.relpath(relFileToCur, relRootToCur)
+            for excludeFile in excludeFiles:
+                if path.samefile(relFileToRoot, excludeFile):
+                    if verbosity >= 4:
+                        print(
+                            "Walked-through file \"{}\" is excluded as it matches \"{}\"."
+                            .format(relFileToCur, excludeFile)
+                        )
+                    continue
+            if extName not in moduleExtension and extName not in extMapper.head_source_pairs.keys() and extName not in extMapper.head_source_pairs.values() and extName not in extMapper.headers and extName not in extMapper.sources:
+                if verbosity >= 4:
+                    print(
+                        "Walked-through file \"{}\" has a different extension name, skipped."
+                        .format(relFileToCur)
+                    )
+                continue
+            scanFileDependencies(relFileToCur, relRootToCur,
+                                 verbosity, encoding, extMapper, logUpdate)
+
+
+def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> None:
     if not path.exists(relSrcToCur):
         raise Exception(
             "Unexistent file \"{}\" referenced.".format(relSrcToCur))
 
     relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
+    relLog = path.relpath(path.join(relRootToCur, LOG_PATH))
+    skip = False
+    if relSrcToRoot in depsDict:
+        lastScanTime = depsDict[relSrcToRoot].time
+        lastModTime = path.getmtime(relSrcToCur)
+        if lastScanTime <= lastModTime:
+            if verbosity >= 2:
+                print(
+                    BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
+            with open(relLog, 'a') as log:
+                print(
+                    "{} < {}, \"{}\"".format(
+                        lastScanTime, lastModTime, relSrcToCur),
+                    file=log
+                )
+        else:
+            if verbosity >= 3:
+                print(
+                    BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
+            skip = True
+    elif logUpdate:
+        with open(relLog, 'a') as log:
+            print(
+                "Missed, \"{}\"".format(relSrcToCur),
+                file=log
+            )
+    if skip:
+        info = depsDict[relSrcToRoot]
+        if info.provided:
+            modulesBiDict.update({info.provided: relSrcToRoot})
+        return
 
     with open(relSrcToCur, encoding=encoding) as file:
         if verbosity >= 1:
@@ -223,7 +299,10 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                                    for s in ["#include", '"', "'", '//', '/*', 'import', 'export'])
 
             if a == b == c == d == e == f == g == -1:
-                return info
+                depsDict[relSrcToRoot] = info
+                if info.provided:
+                    modulesBiDict.update({info.provided: relSrcToRoot})
+                return
             if a == -1:
                 a = len(content)
             if b == -1:
@@ -325,6 +404,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                         if ":" in main:
                             semicolon = main.rfind(":")
                             main = main[:semicolon]
+                        parDict.setdefault(main, set())
+                        parDict[main].add(imported)
                         info.modules.module.add(main+imported)
                     else:
                         info.modules.module.add(imported)
@@ -344,14 +425,15 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     assert info.provided, "Re-exporting should be written after exporting."
                     content = content.removeprefix("import")
                     semicolon = content.find(";")
-                    partition = content[:semicolon]
-                    info.modules.module.add(
-                        info.provided + __removeSpace(partition))
+                    partition = __removeSpace(content[:semicolon])
+                    parDict.setdefault(info.provided, set())
+                    parDict[info.provided].add(partition)
+                    info.modules.module.add(info.provided+partition)
                 else:
                     if verbosity >= 5:
                         print(CYAN + "Exporting" + RESET)
             else:
-                raise
+                raise Exception("What the fuck?")
 
 
 CACHE_PATH = "umakeCache.json"

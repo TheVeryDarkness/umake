@@ -17,14 +17,15 @@ def escapeSource(relSrcToRoot: str):
     return relSrcToRoot.replace('/', '__').replace('\\', '__')
 
 
-def loadConfig(args: argparse.Namespace, relRoot: str):
+def loadConfig(args: argparse.Namespace, relRoot: str, default: argparse.Namespace):
     configPath = path.join(args.root, CONFIG_PATH)
     if not path.exists(configPath):
         return
     with open(configPath) as config:
         cfg = json.load(config)
         for key, value in cfg.items():
-            vars(args)[key] = value
+            if key not in vars(args).keys() or key not in vars(default).keys() or vars(args)[key] == vars(default)[key]:
+                vars(args)[key] = value
         if "sources" in cfg.keys():
             for i in range(len(cfg["sources"])//2):
                 sources = cfg["sources"]
@@ -80,7 +81,7 @@ def main():
     parser.add_argument("--log-update", action="store_true",
                         help="Log when cache is updated.")
     args = parser.parse_args()
-
+    default = parser.parse_args([])
     _loadConfig = args.load_config
     _saveConfig = args.save_config
 
@@ -90,7 +91,7 @@ def main():
     relRoot = path.relpath(root)
 
     if _loadConfig:
-        loadConfig(args, relRoot)
+        loadConfig(args, relRoot, default)
 
     if not args.project:
         args.project = args.root
@@ -140,49 +141,23 @@ def main():
     try:
         ext: extensionMapper = extensionMapper(
             extHeaders, extSources, extHeaderSourcePairs)
+        scanAllFiles(relProjToCur, relRoot, excludeFiles, excludeDirs,
+                     encoding, ext, moduleExtension, verbosity, logUpdate)
         for source in sources:
             relSource = path.relpath(source, relRoot)
-            modulesToBePreCompiledBySources[relSource], extraSourcesBySources[relSource] = recursiveScanLocalDependencies(
+            modulesToBePreCompiledBySources[relSource], extraSourcesBySources[relSource] = recursiveCollectDependencies(
                 source, relRoot, verbosity, encoding, ext, logUpdate)
-        for dir, dirs, files in os.walk(relProjToCur):
-            relDirToCur = path.relpath(dir)
-            relDirToRoot = path.relpath(relDirToCur, relRoot)
-            for excludeDir in excludeDirs:
-                if path.exists(relDirToRoot) and path.exists(excludeDir) and path.samefile(relDirToRoot, excludeDir):
-                    if verbosity >= 4:
-                        print(
-                            "Walked-through dir \"{}\" is excluded as it matches \"{}\"."
-                            .format(relDirToCur, excludeDir)
-                        )
-                    continue
-            for file in files:
-                nothing, extName = path.splitext(file)
-                relFileToCur = path.relpath(path.join(dir, file))
-                relFileToRoot = path.relpath(relFileToCur, relRoot)
-                for excludeFile in excludeFiles:
-                    if path.samefile(relFileToRoot, excludeFile):
-                        if verbosity >= 4:
-                            print(
-                                "Walked-through file \"{}\" is excluded as it matches \"{}\"."
-                                .format(relFileToCur, excludeFile)
-                            )
-                        continue
-                if extName not in moduleExtension:
-                    if verbosity >= 4:
-                        print(
-                            "Walked-through file \"{}\" has a different extension name, skipped."
-                            .format(relFileToCur)
-                        )
-                    continue
-                modulesToBePreCompiledBySources[relFileToRoot], extraSourcesBySources[relFileToRoot] = recursiveScanLocalDependencies(
-                    relFileToCur, relRoot, verbosity, encoding, ext, logUpdate)
+        for relModuleToRoot in modulesBiDict.values():
+            relModuleToCur = path.relpath(path.join(relRoot, relModuleToRoot))
+            modulesToBePreCompiledBySources[relModuleToRoot], extraSourcesBySources[relModuleToRoot] = recursiveCollectDependencies(
+                relModuleToCur, relRoot, verbosity, encoding, ext, logUpdate)
         if autoObj:
             for extraSourcesBySource in extraSourcesBySources.values():
                 extraSourcesToRoot.unionWith(extraSourcesBySource)
             for extraSrcToRoot in extraSourcesToRoot.sources:
                 extraSrcToCur = path.relpath(
                     path.join(relRoot, extraSrcToRoot))
-                modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveScanLocalDependencies(
+                modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveCollectDependencies(
                     extraSrcToCur, relRoot, verbosity, encoding, ext, logUpdate)
                 objectsDict[extraSrcToRoot] = escapeSource(extraSrcToRoot)
             updated_one_source = True
@@ -194,7 +169,7 @@ def main():
                             path.join(relRoot, extraSrcToRoot)
                         )
                         if extraSrcToRoot not in extraSourcesBySources.keys():
-                            modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveScanLocalDependencies(
+                            modulesToBePreCompiledBySources[extraSrcToRoot], extraSourcesBySources[extraSrcToRoot] = recursiveCollectDependencies(
                                 extraSrcToCur, relRoot, verbosity, encoding, ext, logUpdate)
                             objectsDict[extraSrcToRoot] = escapeSource(
                                 extraSrcToRoot)
@@ -234,14 +209,14 @@ def main():
                             [modulesBiDict[module]
                                 not in built for module in modules.module]
                         )
-                    ):
+                    ): # Dependencies not built or already built
                         continue
                     has_built_one_in_one_loop = True
-                    if source in modulesBiDict.inverse:
-                        print('MODULE', modulesBiDict.inverse[source], 'SOURCE',
+                    if source in modulesBiDict.inv:
+                        print('MODULE', modulesBiDict.inv[source], 'SOURCE',
                               end=' ')
                     elif source in relSourcesToRoot:
-                        print('TARGET', targetsBidict.inverse[source], "SOURCE",
+                        print('TARGET', targetsBidict.inv[source], "SOURCE",
                               end=' ')
                     else:
                         if not autoObj:
@@ -256,17 +231,25 @@ def main():
                             print('DEPEND', end=' ')
                             depend = True
                         print(objectsDict[extraSourcesBySource], end=' ')
-                    for module in built:  # Should be modules.module:
-                        if module in modulesBiDict.inverse:
+                    for module in modules.module:
+                        if module in modulesBiDict.keys():
                             if not reference:
                                 print('REFERENCE', end=' ')
                                 reference = True
-                            print(modulesBiDict.inverse[module], end=' ')
+                            print(module, end=' ')
+                            if module in parDict:
+                                for par in parDict[module]:
+                                    print(module+par, end=' ')
+                    if source in modulesBiDict.inv:
+                        for module in modulesBiDict:
+                            semi = module.find(':')
+                            if semi != -1:
+                                moduleBase = module[0:semi]
                     built.append(source)
                     if len(built) < len(modulesToBePreCompiledBySources):
                         print(';')
 
-                assert has_built_one_in_one_loop, "Cyclic imports"
+                assert has_built_one_in_one_loop, "Cyclic imports among {}.".format(set(modulesToBePreCompiledBySources.keys())-set(built))
         elif target == 'ninja':
             print(RED + "Ninja support is not tested." + RESET)
             generate_ninja(path.join(relRoot, "build.ninja"),
