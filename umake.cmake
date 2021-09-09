@@ -1,7 +1,7 @@
 # Under MIT License, see ./License
 
 # For ADDITIONAL_CLEAN_FILES
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.1)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
     message(WARNING "Errors may occur if using \"${CMAKE_GENERATOR}\" as generator. I'm trying to fix them, but Ninja should work for you.")
@@ -49,6 +49,11 @@ check_cxx_compiler_flag(${CXX_MODULES_FOR_CHECK} CXX_MODULES_SUPPORTED)
 if (NOT CXX_MODULES_SUPPORTED)
     message(FATAL_ERROR "Compiler \"${CMAKE_CXXCOMPILER_ID}\" doesn't support C++ 20 modules. Checked by flag \"${CXX_MODULES_FOR_CHECK}\"")
 endif ()
+
+
+if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE} and ${CMAKE_VERSION} VERSION_LESS 3.15)
+    message(WARNING "Clean precompiled modules by yourself at \"${CXX_PRECOMPILED_MODULES_DIR}\".")
+endif()
 
 # Add flags to the target to enable module support.
 function (target_enable_cxx_modules TARGET)
@@ -186,13 +191,17 @@ function (add_module_library TARGET _SOURCE SOURCE)
         CXX_MODULE_REFERENCES "${REFERENCES}"
     )
 
-    get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
-    if(NOT ${_CLEAN_FILES})
-        set(_CLEAN_FILES ${OUT_FILE})
-    else()
-        string(APPEND _CLEAN_FILES ${OUT_FILE})
+    if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
+        if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
+            get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
+            if(NOT ${_CLEAN_FILES})
+                set(_CLEAN_FILES ${OUT_FILE})
+            else()
+                string(APPEND _CLEAN_FILES ${OUT_FILE})
+            endif()
+            set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
+        endif()
     endif()
-    set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
 endfunction ()
 
 ## Link a (C++ module) library to (C++ module) target.
