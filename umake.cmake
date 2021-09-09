@@ -1,6 +1,5 @@
 # Under MIT License, see ./License
 
-# For ADDITIONAL_CLEAN_FILES
 cmake_minimum_required(VERSION 3.7)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
@@ -393,6 +392,10 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
     if(ODD)
         list(POP_FRONT ARGN UMAKE_PATH)
     else()
+        if(${CMAKE_VERSION} VERSION_LESS 3.19)
+            message(WARNING "CMake doesn't support parsing json string yet. Pass \"umake.py\" path instead.")
+        endif()
+        
         if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/umakeConfig.json")
             file(STRINGS "umakeConfig.json" configJSON)
             string(JSON UMAKE_PATH GET ${configJSON} "umake.py")
