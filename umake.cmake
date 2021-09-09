@@ -1,7 +1,7 @@
 # Under MIT License, see ./License
 
 # For ADDITIONAL_CLEAN_FILES
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.7)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
     message(WARNING "Errors may occur if using \"${CMAKE_GENERATOR}\" as generator. I'm trying to fix them, but Ninja should work for you.")
@@ -51,7 +51,7 @@ if (NOT CXX_MODULES_SUPPORTED)
 endif ()
 
 
-if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE} and ${CMAKE_VERSION} VERSION_LESS 3.15)
+if(${CMAKE_VERSION} VERSION_LESS 3.15)
     message(WARNING "Clean precompiled modules by yourself at \"${CXX_PRECOMPILED_MODULES_DIR}\".")
 endif()
 
