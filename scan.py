@@ -373,6 +373,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 end_note = content.find('*/')
                 drop(end_note+len('*/'), "Dropping below in multi-line comment:")
             elif f == __uniqueMin(a, b, c, d, e, f, g, h):  # import
+                if f > 0 and re.fullmatch(r'\w', content[f-1]):
+                    continue
                 content = content[f+len("import"):]
                 if re.fullmatch(r"\w", content[0]):
                     continue
@@ -406,6 +408,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
                 content = content[import_end+1:]
             elif g == __uniqueMin(a, b, c, d, e, f, g, h):  # export
+                if g > 0 and re.fullmatch(r'\w', content[g-1]):
+                    continue
                 content = content[g+len("export"):]
                 if re.fullmatch(r"\w", content[0]):
                     continue
@@ -433,6 +437,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 if semicolon:
                     content = content[semicolon+1:]
             elif h == __uniqueMin(a, b, c, d, e, f, g, h):
+                if h > 0 and re.fullmatch(r'\w', content[h-1]):
+                    continue
                 content = content[h+len("export"):]
                 if re.fullmatch(r"\w", content[0]):
                     continue
