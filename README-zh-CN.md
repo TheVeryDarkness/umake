@@ -31,4 +31,4 @@ add_moduled_executables_with_a_main_source("../umake/umake.py" main main.cpp tes
 
 如果使用非Ninja的生成器，您可能会遇到某些错误，引起这部分问题的代码不是我可以修改的。如果您拒绝使用Ninja，可以尝试回退到v0.0.0版本，以获得更高的兼容性（但预编译模块每次都会重新编译）。
 
-Visual Studio 可能会显示无法删除.ifc文件而无法重新编译，您可以关闭VS然后手动删除它们。Visual Studio Code未发现类似问题。
+Visual Studio 可能会显示无法删除.ifc文件而无法重新编译，您可以关闭VS然后手动删除它们。一般来说如果遇到增量编译问题，只需要重新开始编译（而非重新编译），或者重新编译主源文件这一个文件。Visual Studio Code未发现类似问题。
