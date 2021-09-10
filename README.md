@@ -6,19 +6,21 @@ As umake will cache the scanning results, you may want to delete it or disable i
 
 But well, now it only provides an extension for cmake. And not all compilers support cpp modules.
 
-## notice 
+## notice
 
 Please avoid writting codes like below to confuse me, especially when importing that would cause errors, such as cyclic import:
 
 ~~~cpp
 #if 0
-import somemodule; 
+import somemodule;
 #endif
 ~~~
 
 Avoid double underlines in filename if you enable auto object dependencies detection, which is used for escaping for slash and back-slash.
 
 Source file dependencies can't be recognized if you didn't include the corresponding headers, you can add them to dependencies manually if really needed.
+
+Module implement units are scanned, but I don't know how to use it.
 
 ## usage
 
@@ -28,7 +30,7 @@ Second, you should have a Python executable. Some packages are required, you can
 
 ### Together with CMake
 
-Just include umake.cmake in your CMakeLists.txt, then replace your add_executable with add_moduled_executables_with_a_main_source. Some changes may be needed. For example, 
+Just include umake.cmake in your CMakeLists.txt, then replace your add_executable with add_moduled_executables_with_a_main_source. Some changes may be needed. For example,
 
 ~~~CMake
 add_moduled_executables_with_a_main_source("../umake/umake.py" main main.cpp tests tests.cpp)

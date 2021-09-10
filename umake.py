@@ -209,7 +209,7 @@ def main():
                             [modulesBiDict[module]
                                 not in built for module in modules.module]
                         )
-                    ): # Dependencies not built or already built
+                    ):  # Dependencies not built or already built
                         continue
                     has_built_one_in_one_loop = True
                     if source in modulesBiDict.inv:
@@ -241,15 +241,16 @@ def main():
                                 for par in parDict[module]:
                                     print(module+par, end=' ')
                     if source in modulesBiDict.inv:
-                        for module in modulesBiDict:
-                            semi = module.find(':')
-                            if semi != -1:
-                                moduleBase = module[0:semi]
+                        if modulesBiDict.inv[source] in implDict.keys():
+                            print(
+                                "IMPLEMENT",  implDict[modulesBiDict.inv[source]],
+                                end=' ')
                     built.append(source)
                     if len(built) < len(modulesToBePreCompiledBySources):
                         print(';')
 
-                assert has_built_one_in_one_loop, "Cyclic imports among {}.".format(set(modulesToBePreCompiledBySources.keys())-set(built))
+                assert has_built_one_in_one_loop, "Cyclic imports among {}.".format(
+                    set(modulesToBePreCompiledBySources.keys())-set(built))
         elif target == 'ninja':
             print(RED + "Ninja support is not tested." + RESET)
             generate_ninja(path.join(relRoot, "build.ninja"),
@@ -264,6 +265,8 @@ def main():
               RESET, file=stderr)
         if not cacheDisabled:
             deleteCache(relRoot)
+        print(YELLOW + "Re-raise for stack trace." + RESET)
+        raise
 
 
 if __name__ == "__main__":

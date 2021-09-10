@@ -99,24 +99,38 @@ function(add_object_dependency SOURCE REFERENCE)
 endfunction()
 
 ## Create C++ module interface.
-## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
+## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE> ...] [IMPLEMENT <IMPLEMENT_UNIT> ...])
 ## Set target property below:
 ##  CXX_MODULE_NAME             Unescaped module name
 ##  CXX_MODULE_INTERFACE_FILE   Source file path
 ##  CXX_MODULE_REFERENCES       Escaped names of referenced modules
 function (add_module_library TARGET _SOURCE SOURCE)
+    if(NOT ${_SOURCE} STREQUAL SOURCE)
+        message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
+    endif()
     # Set cmake to use CXX compiler on C++ module files
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
     string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
-
-    set(REFERENCES ${ARGN})
-    if(REFERENCES)
-        list(POP_FRONT REFERENCES _REFERENCE)
-        if(NOT ${_REFERENCE} STREQUAL REFERENCE)
-            message(FATAL_ERROR "\"${_REFERENCE}\" should be \"REFERENCE\"")
+    
+    set(DEPENDS)
+    set(REFERENCES)
+    set(IMPLEMENTS)
+    set(MODE)
+    foreach(TOKEN IN LISTS ARGN)
+        if(${TOKEN} STREQUAL DEPEND)
+            set(MODE ${TOKEN})
+        elseif(${TOKEN} STREQUAL REFERENCE)
+            set(MODE ${TOKEN})
+        elseif(${TOKEN} STREQUAL IMPLEMENT)
+            set(MODE ${TOKEN})
+        else()
+            if(NOT MODE)
+                message(FATAL_ERROR "Mode not set.")
+            endif()
+            list(APPEND ${MODE}S ${TOKEN})
         endif()
-    endif()
+    endforeach()
 
     # Create targets for interface files
     if(IS_ABSOLUTE ${SOURCE})
@@ -133,7 +147,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
     endif()
     if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
         # Create interface build target
-        add_library(${ESCAPED_TARGET} OBJECT ${SOURCE})
+        add_library(${ESCAPED_TARGET} OBJECT ${SOURCE} ${IMPLEMENTS})
         foreach (REFERENCE IN LISTS REFERENCES)
             string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
             target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
@@ -144,7 +158,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
                 PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
             )
             add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
-        endforeach ()
+        endforeach()
         target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_OUTPUT_FLAG} "${OUT_FILE}")
     else()
         # TODO: CXX flags might be different

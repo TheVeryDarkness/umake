@@ -29,7 +29,7 @@ def __removeSpace(s: str):
 
 
 def __uniqueMin(*numbers: int):
-    res = min(*numbers)
+    res = min(filter(lambda n: n != -1, numbers))
     assert numbers.count(res) == 1
     return res
 
@@ -79,14 +79,14 @@ class sourcesDependency:
 
 
 class dependency:
-    def __init__(self, time: float, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provided: Optional[str] = None, sources: Optional[sourcesDependency] = None) -> None:
+    def __init__(self, time: float, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provide: Optional[str] = None, sources: Optional[sourcesDependency] = None) -> None:
         self.time = time
         self.headers = headers if headers else headersDependency(set(), set())
         self.modules = modules if modules else modulesDependency(
             set(), set(), set())
-        self.provided = provided
+        self.provide = provide
         self.sources = sources if sources else sourcesDependency(set())
-        assert not provided or re.fullmatch(r"[\w.:]*", provided)
+        assert not provide or re.fullmatch(r"[\w.:]*", provide)
         assert time
 
     def __repr__(self) -> str:
@@ -115,7 +115,7 @@ class extensionMapper:
         self.head_source_pairs = head_source_pairs
 
 
-# module name <--> relative path to current directory
+# module name <--> relative path to root directory
 global modulesBiDict
 modulesBiDict: bidict[str, str] = bidict()
 global content
@@ -124,11 +124,15 @@ global depsDict
 depsDict: dict[str, dependency] = dict()
 global parDict
 parDict: dict[str, set[str]] = dict()
+# module name <--> reletive path of implement unit to root directory
+global implDict
+implDict: bidict[str, str] = bidict()
 
 LOG_PATH = "umakeLog.txt"
 
 global calculatedDependencies
-calculatedDependencies: dict[str, tuple[modulesDependency, sourcesDependency]] = dict()
+calculatedDependencies: dict[str,
+                             tuple[modulesDependency, sourcesDependency]] = dict()
 
 
 def __collectDependencies(relFileToRoot: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
@@ -158,15 +162,15 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
 
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
-        if deps.provided != None:
-            provided = deps.provided
-            assert provided, "Oops!"
+        if deps.provide != None:
+            provide = deps.provide
+            assert provide, "Oops!"
             for imported in deps.modules.module:
                 if ':' in imported:
                     if imported.startswith(':'):
-                        if ':' in provided:
-                            provided = provided[provided.find(':'):]
-                        imported = provided+':'+imported
+                        if ':' in provide:
+                            provide = provide[provide.find(':'):]
+                        imported = provide+':'+imported
                     assert imported in modulesBiDict, "Importing {} from {}, but it's not found.".format(
                         imported, relSrcToCur)
                     relImportedToRoot = modulesBiDict[imported]
@@ -261,8 +265,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
             )
     if skip:
         info = depsDict[relSrcToRoot]
-        if info.provided:
-            modulesBiDict.update({info.provided: relSrcToRoot})
+        if info.provide:
+            modulesBiDict.update({info.provide: relSrcToRoot})
         return
 
     with open(relSrcToCur, encoding=encoding) as file:
@@ -295,30 +299,16 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
         while True:
             # Optimizable
-            a, b, c, d, e, f, g = (content.find(s)
-                                   for s in ["#include", '"', "'", '//', '/*', 'import', 'export'])
+            a, b, c, d, e, f, g, h = (content.find(s)
+                                      for s in ["#include", '"', "'", '//', '/*', 'import', 'export', 'module'])
 
-            if a == b == c == d == e == f == g == -1:
+            if a == b == c == d == e == f == g == h == -1:
                 depsDict[relSrcToRoot] = info
-                if info.provided:
-                    modulesBiDict.update({info.provided: relSrcToRoot})
+                if info.provide:
+                    modulesBiDict.update({info.provide: relSrcToRoot})
                 return
-            if a == -1:
-                a = len(content)
-            if b == -1:
-                b = len(content)
-            if c == -1:
-                c = len(content)
-            if d == -1:
-                d = len(content)
-            if e == -1:
-                e = len(content)
-            if f == -1:
-                f = len(content)
-            if g == -1:
-                g = len(content)
 
-            if a == __uniqueMin(a, b, c, d, e, f, g):  # include
+            if a == __uniqueMin(a, b, c, d, e, f, g, h):  # include
                 content = content[a+len("#include"):]
                 content = content.lstrip()
                 lib = re.search(r"^<[^<>]*>", content)
@@ -339,7 +329,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     info.headers.local.add(_path[1:-1])
                 else:
                     raise Exception("What's being included?")
-            elif b == __uniqueMin(a, b, c, d, e, f, g):  # string
+            elif b == __uniqueMin(a, b, c, d, e, f, g, h):  # string
                 content = content[b+1:]
                 while True:
                     escape = content.find("\\")
@@ -352,7 +342,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 assert linesep not in content[:next_quote +
                                               1], "Multiline string"
                 drop(next_quote, "Dropping below in string:")
-            elif c == __uniqueMin(a, b, c, d, e, f, g):  # character
+            elif c == __uniqueMin(a, b, c, d, e, f, g, h):  # character
                 content = content[c+1:]
                 while True:
                     escape = content.find("\\")
@@ -365,7 +355,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 assert linesep not in content[:next_quote +
                                               1], "Multiline character"
                 drop(next_quote, "Dropping below in character:")
-            elif d == __uniqueMin(a, b, c, d, e, f, g):  # comment //
+            elif d == __uniqueMin(a, b, c, d, e, f, g, h):  # comment //
                 content = content[d:]
                 endline = content.find('\n\r')
                 if endline == -1:
@@ -378,12 +368,14 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     drop(len(content)-1, "Drropping below in comment:")
                 else:
                     drop(endline, "Dropping below in comment:")
-            elif e == __uniqueMin(a, b, c, d, e, f, g):  # comment /**/
+            elif e == __uniqueMin(a, b, c, d, e, f, g, h):  # comment /**/
                 content = content[e:]
                 end_note = content.find('*/')
                 drop(end_note+len('*/'), "Dropping below in multi-line comment:")
-            elif f == __uniqueMin(a, b, c, d, e, f, g):  # import
+            elif f == __uniqueMin(a, b, c, d, e, f, g, h):  # import
                 content = content[f+len("import"):]
+                if re.fullmatch(r"\w", content[0]):
+                    continue
                 next = re.search(r"[^\s]", content)
                 assert next, "Unexpected termination."
                 content = content[next.span()[0]:]
@@ -399,8 +391,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     info.modules.local.add(imported)
                 elif re.fullmatch(r"[\w.:]+", imported):
                     if imported.startswith(":"):
-                        assert info.provided, "Importing partition should be written after exporting."
-                        main: str = info.provided
+                        assert info.provide, "Importing partition should be written after exporting."
+                        main: str = info.provide
                         if ":" in main:
                             semicolon = main.rfind(":")
                             main = main[:semicolon]
@@ -411,27 +403,48 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                         info.modules.module.add(imported)
                 else:
                     raise Exception("What's being imported?")
-            elif g == __uniqueMin(a, b, c, d, e, f, g):  # export
+
+                content = content[import_end+1:]
+            elif g == __uniqueMin(a, b, c, d, e, f, g, h):  # export
                 content = content[g+len("export"):]
+                if re.fullmatch(r"\w", content[0]):
+                    continue
                 next = re.search(r"[^\s]", content)
                 assert next, "Unexpected termination."
                 content = content[next.span()[0]:]
+                semicolon = None
                 if content.startswith("module"):
-                    assert not info.provided, "Exporting more than 1 modules"
+                    assert not info.provide, "Exporting more than 1 modules"
                     content = content.removeprefix("module")
                     semicolon = content.find(";")
-                    info.provided = __removeSpace(content[:semicolon])
+                    info.provide = __removeSpace(content[:semicolon])
                 elif content.startswith("import"):
-                    assert info.provided, "Re-exporting should be written after exporting."
+                    assert info.provide, "Re-exporting should be written after exporting."
                     content = content.removeprefix("import")
                     semicolon = content.find(";")
                     partition = __removeSpace(content[:semicolon])
-                    parDict.setdefault(info.provided, set())
-                    parDict[info.provided].add(partition)
-                    info.modules.module.add(info.provided+partition)
+                    parDict.setdefault(info.provide, set())
+                    parDict[info.provide].add(partition)
+                    info.modules.module.add(info.provide+partition)
                 else:
                     if verbosity >= 5:
                         print(CYAN + "Exporting" + RESET)
+
+                if semicolon:
+                    content = content[semicolon+1:]
+            elif h == __uniqueMin(a, b, c, d, e, f, g, h):
+                content = content[h+len("export"):]
+                if re.fullmatch(r"\w", content[0]):
+                    continue
+                next = re.search(r"[^\s]", content)
+                assert next, "Unexpected termination."
+                content = content[next.span()[0]:]
+                semicolon = content.find(";")
+                provide = __removeSpace(content[:semicolon])
+                info.provide = provide
+                implDict.setdefault(info.provide, relSrcToRoot)
+
+                content = content[semicolon+1:]
             else:
                 raise Exception("What the fuck?")
 
@@ -480,7 +493,7 @@ def loadCache(relRootToCur: str):
                             set(modules["library"]),
                             set(modules["local"])
                         ),
-                        dep["provided"],
+                        dep["provide"],
                         sourcesDependency(set(sources["sources"]))
                     )})
         except Exception as e:
