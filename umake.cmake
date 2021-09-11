@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.7)
 
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
-    message(WARNING "Errors may occur if using \"${CMAKE_GENERATOR}\" as generator. I'm trying to fix them, but Ninja should work for you.")
+    message(WARNING "Errors may occur with \"${CMAKE_GENERATOR}\", as I may not meet and solve them at the first time. Ninja should work for you.")
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -149,7 +149,12 @@ function (add_module_library TARGET _SOURCE SOURCE)
     endif()
 
     # Create interface build target
-    add_library(${ESCAPED_TARGET} OBJECT ${SOURCE} ${IMPLEMENTS})
+    # Select object libraries would cause errors if you use Visual Studio generators
+    if("${CMAKE_GENERATOR}" STREQUAL Ninja)
+        add_library(${ESCAPED_TARGET} OBJECT ${SOURCE} ${IMPLEMENTS})
+    else()
+        add_library(${ESCAPED_TARGET} STATIC ${SOURCE} ${IMPLEMENTS})
+    endif()
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
