@@ -296,10 +296,11 @@ function(add_module_implement TARGET _SOURCE SOURCE)
         endif()
     endforeach()
 
-    add_library(${IMPLEMENT_TARGET} OBJECT ${SOURCE})
+    add_library(${IMPLEMENT_TARGET} STATIC ${SOURCE})
 
     add_dependencies(${IMPLEMENT_TARGET} ${ESCAPED_TARGET})
     add_dependencies(${IMPLEMENT_TARGET} ${DEPENDS})
+    message(DEBUG "Link ${DEPENDS} to ${IMPLEMENT_TARGET}.")
     target_link_libraries(${IMPLEMENT_TARGET} PUBLIC ${DEPENDS})
     
     list(APPEND REFERENCES ${ESCAPED_TARGET})
