@@ -51,7 +51,7 @@ else() # Any more check?
         if(NOT CMAKE_CXX_STANDARD)
             set(CXX_MODULES_VERSION_FLAG "-std=c++20")
         elseif(${CMAKE_CXX_STANDARD} GREATER 20)
-            set(CXX_MODULES_VERSION_FLAG "-std=latest")
+            set(CXX_MODULES_VERSION_FLAG "-std=c++2a")
         else()
             set(CXX_MODULES_VERSION_FLAG "-std=c++20")
         endif()
