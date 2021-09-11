@@ -18,9 +18,7 @@ if(MSVC)
     set(CXX_PRECOMPILED_MODULES_EXT ifc)
     set(CXX_MODULES_CREATE_FLAGS -c)
     set(CXX_MODULES_SPECIFY_MODULE_NAME TRUE)
-    if(${CMAKE_GENERATOR} STREQUAL "Ninja")
-        set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE TRUE)
-    endif()
+    set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE TRUE)
 
     # It's mentioned in CMakeCxxModules(https://github.com/NTSFka/CMakeCxxModules)
     # I can't find any information in documents.
@@ -35,11 +33,11 @@ if(MSVC)
     endif()
     if(NOT ${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
         if(NOT CMAKE_CXX_STANDARD)
-            list(APPEND CXX_MODULES_OUTPUT_FLAG "/std:c++20")
+            set(CXX_MODULES_VERSION_FLAG "/std:c++20")
         elseif(${CMAKE_CXX_STANDARD} GREATER 20)
-            list(APPEND CXX_MODULES_OUTPUT_FLAG "/std:c++${CMAKE_CXX_STABDARD}")
+            set(CXX_MODULES_VERSION_FLAG "/std:c++latest")
         else()
-            list(APPEND CXX_MODULES_OUTPUT_FLAG "/std:c++20")
+            set(CXX_MODULES_VERSION_FLAG "/std:c++20")
         endif()
     endif()
 else() # Any more check?
@@ -50,10 +48,12 @@ else() # Any more check?
     set(CXX_MODULES_REFERENCE_FLAG -fmodule-file=)
     set(CXX_MODULES_OUTPUT_FLAG -o)
     if(NOT ${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
-        if(${CMAKE_CXX_STABDARD} GREATER 20)
-            list(APPEND CXX_MODULES_OUTPUT_FLAG "-std=c++${CMAKE_CXX_STABDARD}")
+        if(NOT CMAKE_CXX_STANDARD)
+            set(CXX_MODULES_VERSION_FLAG "-std=c++20")
+        elseif(${CMAKE_CXX_STANDARD} GREATER 20)
+            set(CXX_MODULES_VERSION_FLAG "-std=latest")
         else()
-            list(APPEND CXX_MODULES_OUTPUT_FLAG "-std=c++20")
+            set(CXX_MODULES_VERSION_FLAG "-std=c++20")
         endif()
     endif()
 endif()
@@ -114,7 +114,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
     string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
-    
+
     set(DEPENDS)
     set(REFERENCES)
     set(IMPLEMENTS)
@@ -147,45 +147,51 @@ function (add_module_library TARGET _SOURCE SOURCE)
     if (OUT_FILE_DIR)
         file(MAKE_DIRECTORY ${OUT_FILE_DIR})
     endif()
+
+    # Create interface build target
+    add_library(${ESCAPED_TARGET} OBJECT ${SOURCE} ${IMPLEMENTS})
+    foreach (REFERENCE IN LISTS REFERENCES)
+        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+        get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
+        get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
+        # Avoid de-duplication
+        target_compile_options(${ESCAPED_TARGET}
+            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+        )
+        add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
+    endforeach()
+
     if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
-        # Create interface build target
-        add_library(${ESCAPED_TARGET} OBJECT ${SOURCE} ${IMPLEMENTS})
-        foreach (REFERENCE IN LISTS REFERENCES)
-            string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-            target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
-            get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
-            get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
-            # Avoid de-duplication
-            target_compile_options(${ESCAPED_TARGET}
-                PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
-            )
-            add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
-        endforeach()
-        target_compile_options(${ESCAPED_TARGET} PRIVATE ${CXX_MODULES_OUTPUT_FLAG} "${OUT_FILE}")
+        target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}${OUT_FILE}")
     else()
         # TODO: CXX flags might be different
-        set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE} ${CXX_MODULES_OUTPUT_FLAG} ${OUT_FILE})
+        set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} ${CXX_MODULES_VERSION_FLAG} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE} ${CXX_MODULES_OUTPUT_FLAG} ${OUT_FILE})
         set(ESCAPED_REFERENCES)
         foreach (REFERENCE IN LISTS REFERENCES)
             string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
             get_target_property(FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
             get_target_property(NAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
-            list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG}"${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT}")
+            list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG} "${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT}")
             list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
         endforeach ()
+
         # Add definitions and flags to the target
         get_property(compile_definitions DIRECTORY PROPERTY COMPILE_DEFINITIONS)
         foreach(definition IN LISTS compile_definitions)
             list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
         endforeach()
+
         get_property(compile_definitions GLOBAL PROPERTY COMPILE_DEFINITIONS)
         foreach(definition IN LISTS compile_definitions)
             list(APPEND cmd ${CXX_DEFINITION_HEAD}${definition})
         endforeach()
+
         separate_arguments(FLAGS NATIVE_COMMAND ${CMAKE_CXX_FLAGS})
         foreach(flag IN LISTS FLAGS)
             list(APPEND cmd ${flag})
         endforeach()
+        message("${CMAKE_CONFIGURATION_TYPES}")
         if(CMAKE_BUILD_TYPE)
             string(TOUPPER ${CMAKE_BUILD_TYPE} UPPER_BUILD_TYPE)
             if(CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE})
@@ -195,21 +201,24 @@ function (add_module_library TARGET _SOURCE SOURCE)
                 endforeach()
             endif()
         endif()
+
         add_custom_command(
             OUTPUT ${OUT_FILE}
             COMMAND ${cmd}
             DEPENDS ${IN_FILE} ${ESCAPED_REFERENCES}
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
+        set(PRECOMPILING_TARGET ".PRECOMPILED.${ESCAPED_TARGET}")
         # Create interface build target
-        add_custom_target(${ESCAPED_TARGET}
+        add_custom_target(${PRECOMPILING_TARGET}
             COMMAND ${cmd}
             DEPENDS ${OUT_FILE} ${ESCAPED_REFERENCES}
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
-        foreach (ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
-            target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
-        endforeach ()
+        foreach(ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
+            target_add_module_dependencies(${PRECOMPILING_TARGET} ${ESCAPED_REFERENCE})
+        endforeach()
+        add_dependencies(${ESCAPED_TARGET} ${PRECOMPILING_TARGET})
     endif()
 
     # Store property with interface file
@@ -220,16 +229,14 @@ function (add_module_library TARGET _SOURCE SOURCE)
         CXX_MODULE_REFERENCES "${REFERENCES}"
     )
 
-    if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
-        if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
-            get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
-            if(NOT ${_CLEAN_FILES})
-                set(_CLEAN_FILES ${OUT_FILE})
-            else()
-                string(APPEND _CLEAN_FILES ${OUT_FILE})
-            endif()
-            set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
+    if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
+        get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
+        if(NOT ${_CLEAN_FILES})
+            set(_CLEAN_FILES ${OUT_FILE})
+        else()
+            string(APPEND _CLEAN_FILES ${OUT_FILE})
         endif()
+        set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
     endif()
 endfunction ()
 
@@ -425,7 +432,7 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
         if(${CMAKE_VERSION} VERSION_LESS 3.19)
             message(WARNING "CMake doesn't support parsing json string yet. Pass \"umake.py\" path instead.")
         endif()
-        
+
         if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/umakeConfig.json")
             file(STRINGS "umakeConfig.json" configJSON)
             string(JSON UMAKE_PATH GET ${configJSON} "umake.py")
