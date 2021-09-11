@@ -151,6 +151,10 @@ def main():
             relModuleToCur = path.relpath(path.join(relRoot, relModuleToRoot))
             modulesToBePreCompiledBySources[relModuleToRoot], extraSourcesBySources[relModuleToRoot] = recursiveCollectDependencies(
                 relModuleToCur, relRoot, verbosity, encoding, ext, logUpdate)
+        for relModuleToRoot in implDict.values():
+            relModuleToCur = path.relpath(path.join(relRoot, relModuleToRoot))
+            modulesToBePreCompiledBySources[relModuleToRoot], extraSourcesBySources[relModuleToRoot] = recursiveCollectDependencies(
+                relModuleToCur, relRoot, verbosity, encoding, ext, logUpdate)
         if autoObj:
             for extraSourcesBySource in extraSourcesBySources.values():
                 extraSourcesToRoot.unionWith(extraSourcesBySource)
@@ -218,11 +222,17 @@ def main():
                     elif source in relSourcesToRoot:
                         print('TARGET', targetsBidict.inv[source], "SOURCE",
                               end=' ')
+                    elif source in implDict.inv:
+                        print('IMPLEMENT',
+                              implDict.inv[source], 'SOURCE', end=' ')
                     else:
                         if not autoObj:
                             continue
                         print('OBJECT', objectsDict[source], 'SOURCE', end=' ')
                     print(source, end=' ')
+                    if source in modulesBiDict.inv:
+                        if modulesBiDict.inv[source] in implDict.keys():
+                            print('IMPLEMENT', end=' ')
 
                     for extraSourcesBySource in extraSourcesBySources[source].sources:
                         if extraSourcesBySource == source:
@@ -240,11 +250,6 @@ def main():
                             if module in parDict:
                                 for par in parDict[module]:
                                     print(module+par, end=' ')
-                    if source in modulesBiDict.inv:
-                        if modulesBiDict.inv[source] in implDict.keys():
-                            print(
-                                "IMPLEMENT",  implDict[modulesBiDict.inv[source]],
-                                end=' ')
                     built.append(source)
                     if len(built) < len(modulesToBePreCompiledBySources):
                         print(';')

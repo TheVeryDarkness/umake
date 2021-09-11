@@ -79,12 +79,13 @@ class sourcesDependency:
 
 
 class dependency:
-    def __init__(self, time: float, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provide: Optional[str] = None, sources: Optional[sourcesDependency] = None) -> None:
+    def __init__(self, time: float, headers: Optional[headersDependency] = None, modules: Optional[modulesDependency] = None, provide: Optional[str] = None, implement: Optional[str] = None, sources: Optional[sourcesDependency] = None) -> None:
         self.time = time
         self.headers = headers if headers else headersDependency(set(), set())
         self.modules = modules if modules else modulesDependency(
             set(), set(), set())
         self.provide = provide
+        self.implement = implement
         self.sources = sources if sources else sourcesDependency(set())
         assert not provide or re.fullmatch(r"[\w.:]*", provide)
         assert time
@@ -267,6 +268,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
         info = depsDict[relSrcToRoot]
         if info.provide:
             modulesBiDict.update({info.provide: relSrcToRoot})
+        if info.implement:
+            implDict.update({info.implement: relSrcToRoot})
         return
 
     with open(relSrcToCur, encoding=encoding) as file:
@@ -304,6 +307,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
             if a == b == c == d == e == f == g == h == -1:
                 depsDict[relSrcToRoot] = info
+                if info.implement:
+                    implDict.setdefault(info.implement, relSrcToRoot)
                 if info.provide:
                     modulesBiDict.update({info.provide: relSrcToRoot})
                 return
@@ -446,9 +451,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 assert next, "Unexpected termination."
                 content = content[next.span()[0]:]
                 semicolon = content.find(";")
-                provide = __removeSpace(content[:semicolon])
-                info.provide = provide
-                implDict.setdefault(info.provide, relSrcToRoot)
+                implement = __removeSpace(content[:semicolon])
+                info.implement = implement
 
                 content = content[semicolon+1:]
             else:
@@ -500,6 +504,7 @@ def loadCache(relRootToCur: str):
                             set(modules["local"])
                         ),
                         dep["provide"],
+                        dep["implement"],
                         sourcesDependency(set(sources["sources"]))
                     )})
         except Exception as e:

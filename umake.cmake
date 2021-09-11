@@ -77,7 +77,16 @@ endfunction ()
 
 # Add module dependencies to the target
 function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
-    target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
+    target_link_libraries(${ESCAPED_TARGET} PUBLIC ${ESCAPED_REFERENCE})
+
+    get_target_property(HAS_IMPLEMENT ${ESCAPED_REFERENCE} CXX_MODULE_HAS_IMPLEMENT)
+    if(${HAS_IMPLEMENT})
+        message(VERBOSE "${ESCAPED_REFERENCE} has an individual implement unit.")
+        if(NOT "__impl__.${ESCAPED_REFERENCE}" STREQUAL ${ESCAPED_TARGET})
+            message(DEBUG "Link implement of ${ESCAPED_REFERENCE} to ${ESCAPED_TARGET}.")
+            target_link_libraries(${ESCAPED_TARGET} PUBLIC "__impl__.${ESCAPED_REFERENCE}")
+        endif()
+    endif()
 
     message(DEBUG "${ESCAPED_TARGET} has a dependency on ${ESCAPED_REFERENCE}")
     add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
@@ -102,7 +111,7 @@ function(add_object_dependency SOURCE REFERENCE)
 endfunction()
 
 ## Create C++ module interface.
-## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE> ...] [IMPLEMENT <IMPLEMENT_UNIT> ...])
+## add_module_library(TARGET SOURCE <SOURCE> [REFERENCE <REFERENCE> ...] [DEPEND <DEPEND> ...])
 ## Set target property below:
 ##  CXX_MODULE_NAME             Unescaped module name
 ##  CXX_MODULE_INTERFACE_FILE   Source file path
@@ -116,9 +125,9 @@ function (add_module_library TARGET _SOURCE SOURCE)
 
     string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
 
+    set(HAS_IMPLEMENT FALSE)
     set(DEPENDS)
     set(REFERENCES)
-    set(IMPLEMENTS)
     set(MODE)
     foreach(TOKEN IN LISTS ARGN)
         if(${TOKEN} STREQUAL DEPEND)
@@ -126,7 +135,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         elseif(${TOKEN} STREQUAL REFERENCE)
             set(MODE ${TOKEN})
         elseif(${TOKEN} STREQUAL IMPLEMENT)
-            set(MODE ${TOKEN})
+            set(HAS_IMPLEMENT TRUE)
         else()
             if(NOT MODE)
                 message(FATAL_ERROR "Mode not set.")
@@ -235,6 +244,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         CXX_MODULE_NAME "${TARGET}"
         CXX_MODULE_INTERFACE_FILE "${SOURCE}"
         CXX_MODULE_REFERENCES "${REFERENCES}"
+        CXX_MODULE_HAS_IMPLEMENT "${HAS_IMPLEMENT}"
     )
 
     set(OBJECT_PATH "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${REFERENCE}.dir/${INTERFACE_FILE}${CMAKE_CXX_OUTPUT_EXTENSION}")
@@ -258,6 +268,54 @@ function (add_module_library TARGET _SOURCE SOURCE)
         endif()
     endif()
 endfunction ()
+
+function(add_module_implement TARGET _SOURCE SOURCE)
+    if(NOT ${_SOURCE} STREQUAL SOURCE)
+        message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
+    endif()
+    
+    # Set cmake to use CXX compiler on C++ module files
+    set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
+
+    string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
+    string(CONCAT IMPLEMENT_TARGET "__impl__." ${ESCAPED_TARGET})
+
+    set(DEPENDS)
+    set(REFERENCES)
+    set(MODE)
+    foreach(TOKEN IN LISTS ARGN)
+        if(${TOKEN} STREQUAL DEPEND)
+            set(MODE ${TOKEN})
+        elseif(${TOKEN} STREQUAL REFERENCE)
+            set(MODE ${TOKEN})
+        else()
+            if(NOT MODE)
+                message(FATAL_ERROR "Mode not set.")
+            endif()
+            list(APPEND ${MODE}S ${TOKEN})
+        endif()
+    endforeach()
+
+    add_library(${IMPLEMENT_TARGET} OBJECT ${SOURCE})
+
+    add_dependencies(${IMPLEMENT_TARGET} ${ESCAPED_TARGET})
+    add_dependencies(${IMPLEMENT_TARGET} ${DEPENDS})
+    target_link_libraries(${IMPLEMENT_TARGET} PUBLIC ${DEPENDS})
+    
+    list(APPEND REFERENCES ${ESCAPED_TARGET})
+    # Select object libraries would cause errors if you use Visual Studio generators
+    foreach (REFERENCE IN LISTS REFERENCES)
+        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        target_add_module_dependencies(${IMPLEMENT_TARGET} ${ESCAPED_REFERENCE})
+        get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
+        get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
+        # Avoid de-duplication
+        target_compile_options(${IMPLEMENT_TARGET}
+            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+        )
+        add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
+    endforeach()
+endfunction()
 
 ## Link a (C++ module) library to (C++ module) target.
 ##  add_moduled_executable(TARGET SOURCE <SOURCE> [DEPENDS <DEPEND1> [<DEPEND2> ...]] [REFERENCE <REFERENCE1> [<REFERENCE2> ...]])
@@ -290,7 +348,7 @@ function (add_moduled_executable TARGET)
 
     message(DEBUG "${TARGET} has a dependency on ${DEPENDS}")
     add_dependencies(${TARGET} ${DEPENDS})
-    target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
+    target_link_libraries(${TARGET} PUBLIC ${DEPENDS})
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
@@ -347,7 +405,7 @@ function (add_moduled_library TARGET)
 
     message(DEBUG "${TARGET} has a dependency on ${DEPENDS}")
     add_dependencies(${TARGET} ${DEPENDS})
-    target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
+    target_link_libraries(${TARGET} PUBLIC ${DEPENDS})
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
@@ -392,7 +450,7 @@ function(add_source_file_target TARGET)
     add_library(${TARGET} STATIC ${SOURCES})
     target_enable_cxx_modules(${TARGET})
 
-    target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
+    target_link_libraries(${TARGET} PUBLIC ${DEPENDS})
 
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
@@ -421,6 +479,8 @@ function(execute_umake_command_for_executable command)
         add_moduled_executable(${cmds})
     elseif("OBJECT" STREQUAL ${head})
         add_source_file_target(${cmds})
+    elseif("IMPLEMENT" STREQUAL ${head})
+        add_module_implement(${cmds})
     else()
         message(FATAL_ERROR "Failed to parse the result of umake. \"${head}\" is not a correct target type.")
     endif()
@@ -438,6 +498,8 @@ function(execute_umake_command_for_library command)
         add_moduled_library(${cmds})
     elseif("OBJECT" STREQUAL ${head})
         add_source_file_target(${cmds})
+    elseif("IMPLEMENT" STREQUAL ${head})
+        add_module_implement(${cmds})
     else()
         message(FATAL_ERROR "Failed to parse the result of umake. \"${head}\" is not a correct target type.")
     endif()
@@ -467,6 +529,7 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
         ERROR_VARIABLE ERROR
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
+    message(VERBOSE ${RESULT})
     if(ERROR)
         if(RESULT)
             message("STDOUT:")
