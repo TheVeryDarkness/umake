@@ -77,10 +77,9 @@ endfunction ()
 
 # Add module dependencies to the target
 function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
-    if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
-        # Only real libraries can be linked.
-        target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
-    endif()
+    target_link_libraries(${ESCAPED_TARGET} PRIVATE ${ESCAPED_REFERENCE})
+
+    message(DEBUG "${ESCAPED_TARGET} has a dependency on ${ESCAPED_REFERENCE}")
     add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
 endfunction()
 
@@ -96,6 +95,8 @@ function(add_object_dependency SOURCE REFERENCE)
         else()
             string(APPEND INTERFACE_DEPENDS ";${NEW_OBJECT_DEPEND}")
         endif()
+
+        message(DEBUG "${SOURCE} has an object dependency on ${NEW_OBJECT_DEPEND}")
         set_property(SOURCE ${SOURCE} PROPERTY OBJECT_DEPENDS ${INTERFACE_DEPENDS})
     endif()
 endfunction()
@@ -223,6 +224,8 @@ function (add_module_library TARGET _SOURCE SOURCE)
         foreach(ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
             target_add_module_dependencies(${PRECOMPILING_TARGET} ${ESCAPED_REFERENCE})
         endforeach()
+
+        message(DEBUG "${ESCAPED_TARGET} has a dependency on ${PRECOMPILING_TARGET}")
         add_dependencies(${ESCAPED_TARGET} ${PRECOMPILING_TARGET})
     endif()
 
@@ -234,6 +237,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         CXX_MODULE_REFERENCES "${REFERENCES}"
     )
 
+    set(OBJECT_PATH "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${REFERENCE}.dir/${INTERFACE_FILE}${CMAKE_CXX_OUTPUT_EXTENSION}")
     if(${CMAKE_VERSION} VERSION_GREATER_EQUAL 3.15)
         get_property(_CLEAN_FILES TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES)
         if(NOT ${_CLEAN_FILES})
@@ -242,6 +246,16 @@ function (add_module_library TARGET _SOURCE SOURCE)
             string(APPEND _CLEAN_FILES ${OUT_FILE})
         endif()
         set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
+        set_property(
+            TARGET ${ESCAPED_TARGET}
+            PROPERTY ADDITIONAL_CLEAN_FILES
+            OBJECT_PATH
+        )
+    else()
+        if(EXISTS ${OBJECT_PATH})
+            message(STATUS "Cleaning ${OBJECT_PATH}.")
+            file(REMOVE ${OBJECT_PATH})
+        endif()
     endif()
 endfunction ()
 
@@ -274,6 +288,7 @@ function (add_moduled_executable TARGET)
     target_sources(${TARGET} PRIVATE ${SOURCES})
     target_enable_cxx_modules(${TARGET})
 
+    message(DEBUG "${TARGET} has a dependency on ${DEPENDS}")
     add_dependencies(${TARGET} ${DEPENDS})
     target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
 
@@ -330,6 +345,7 @@ function (add_moduled_library TARGET)
     target_sources(${TARGET} PRIVATE ${SOURCES})
     target_enable_cxx_modules(${TARGET})
 
+    message(DEBUG "${TARGET} has a dependency on ${DEPENDS}")
     add_dependencies(${TARGET} ${DEPENDS})
     target_link_libraries(${TARGET} PRIVATE ${DEPENDS})
 
