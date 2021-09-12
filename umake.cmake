@@ -206,7 +206,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         foreach(flag IN LISTS FLAGS)
             list(APPEND cmd ${flag})
         endforeach()
-        message("${CMAKE_CONFIGURATION_TYPES}")
+
         if(CMAKE_BUILD_TYPE)
             string(TOUPPER ${CMAKE_BUILD_TYPE} UPPER_BUILD_TYPE)
             if(CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE})
@@ -273,7 +273,7 @@ function(add_module_implement TARGET _SOURCE SOURCE)
     if(NOT ${_SOURCE} STREQUAL SOURCE)
         message(FATAL_ERROR "\"${_SOURCE}\" should be \"SOURCE\"")
     endif()
-    
+
     # Set cmake to use CXX compiler on C++ module files
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
@@ -302,7 +302,7 @@ function(add_module_implement TARGET _SOURCE SOURCE)
     add_dependencies(${IMPLEMENT_TARGET} ${DEPENDS})
     message(DEBUG "Link ${DEPENDS} to ${IMPLEMENT_TARGET}.")
     target_link_libraries(${IMPLEMENT_TARGET} PUBLIC ${DEPENDS})
-    
+
     list(APPEND REFERENCES ${ESCAPED_TARGET})
     # Select object libraries would cause errors if you use Visual Studio generators
     foreach (REFERENCE IN LISTS REFERENCES)

@@ -215,6 +215,9 @@ def main():
                         )
                     ):  # Dependencies not built or already built
                         continue
+                    if source in implDict.inv and modulesBiDict[implDict.inv[source]] not in built:
+                        continue
+
                     has_built_one_in_one_loop = True
                     if source in modulesBiDict.inv:
                         print('MODULE', modulesBiDict.inv[source], 'SOURCE',
