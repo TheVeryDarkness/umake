@@ -36,7 +36,7 @@ def loadConfig(args: argparse.Namespace, relRoot: str, default: argparse.Namespa
 def saveConfig(args: argparse.Namespace):
     vars(args)["umake.py"] = argv[0]
     vars(args)["root"] = path.relpath(vars(args)["root"])
-    vars(args)["project"] = path.relpath(vars(args)["project"])
+    vars(args)["folders"] = [path.relpath(folder) for folder in vars(args)["folders"]]
     with open(path.join(args.root, CONFIG_PATH), 'w') as config:
         json.dump(vars(args), config)
 
@@ -49,8 +49,8 @@ def main():
                         help="Verbosity level. Repeat this option to increase.")
     parser.add_argument("-r", "--root", type=str,
                         help="The root path to generate build file, such as makefile or scripts. Current working directory by default.")
-    parser.add_argument("-p", "--project", type=str,
-                        help="The path to the source file folder for the project. Every file in this folder may be scanned for module exports. Root by default.")
+    parser.add_argument("-f", "--folders", type=str, nargs="*",
+                        help="The paths to the source file folders. Every file in those folders may be scanned. Root by default.")
     parser.add_argument("-t", "--target", type=str,
                         help="The target format of output.")
     parser.add_argument("-M", "--module", type=str, nargs="+",
@@ -93,8 +93,8 @@ def main():
     if _loadConfig:
         loadConfig(args, relRoot, default)
 
-    if not args.project:
-        args.project = args.root
+    if not args.folders:
+        args.folders = [args.root]
 
     if _saveConfig:
         saveConfig(args)
@@ -112,10 +112,10 @@ def main():
     verbosity: int = args.verbose
     target: str = args.target
     encoding: str = args.encoding
-    project: str = args.project
-    relProjToCur = path.relpath(
-        path.join(relRoot, path.relpath(project))
-    )
+    folders: list[str] = args.folders
+    relFoldersToCur = [path.relpath(
+        path.join(relRoot, path.relpath(folder))
+    ) for folder in folders]
     moduleExtension: list[str] = args.module
     excludeFiles = args.exclude_files
     excludeDirs = args.exclude_dirs
@@ -141,8 +141,11 @@ def main():
     try:
         ext: extensionMapper = extensionMapper(
             extHeaders, extSources, extHeaderSourcePairs)
-        scanAllFiles(relProjToCur, relRoot, excludeFiles, excludeDirs,
-                     encoding, ext, moduleExtension, verbosity, logUpdate)
+        for relFolderToCur in relFoldersToCur:
+            scanAllFiles(relFolderToCur, relRoot, excludeFiles, excludeDirs,
+                         encoding, ext, moduleExtension, verbosity, logUpdate)
+        cleanCache()
+
         for source in sources:
             relSource = path.relpath(source, relRoot)
             modulesToBePreCompiledBySources[relSource], extraSourcesBySources[relSource] = recursiveCollectDependencies(

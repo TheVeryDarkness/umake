@@ -123,6 +123,8 @@ global content
 content: str
 global depsDict
 depsDict: dict[str, dependency] = dict()
+global depsDictCache
+depsDictCache: dict[str, dependency] = dict()
 global parDict
 parDict: dict[str, set[str]] = dict()
 # module name <--> reletive path of implement unit to root directory
@@ -247,8 +249,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
     relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
     relLog = path.relpath(path.join(relRootToCur, LOG_PATH))
     skip = False
-    if relSrcToRoot in depsDict:
-        lastScanTime = depsDict[relSrcToRoot].time
+    if relSrcToRoot in depsDictCache:
+        lastScanTime = depsDictCache[relSrcToRoot].time
         lastModTime = path.getmtime(relSrcToCur)
         if lastScanTime <= lastModTime:
             if verbosity >= 2:
@@ -272,6 +274,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 file=log
             )
     if skip:
+        depsDict.update({relSrcToRoot: depsDictCache[relSrcToRoot]})
         info = depsDict[relSrcToRoot]
         if info.provide:
             modulesBiDict.update({info.provide: relSrcToRoot})
@@ -283,7 +286,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
         if verbosity >= 1:
             print(BLUE + "Scanning file \"{}\"".format(relSrcToCur) + RESET)
         global content
-        content = file.read()
+        content = " " + file.read()
 
         def drop(next_index: int, desc: str):
             global content
@@ -330,14 +333,14 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     _path = content[span[0]:span[1]]
                     if verbosity >= 4:
                         print(BLUE + "Including library header "+_path + RESET)
-                    content = content[span[1]+1:]
+                    content = content[span[1]:]
                     info.headers.library.add(_path[1:-1])
                 elif loc:
                     span = loc.span()
                     _path = content[span[0]:span[1]]
                     if verbosity >= 4:
                         print(BLUE + "Including local header "+_path + RESET)
-                    content = content[span[1]+1:]
+                    content = content[span[1]:]
                     info.headers.local.add(_path[1:-1])
                 else:
                     raise Exception("What's being included?")
@@ -379,13 +382,14 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 if endline == -1:
                     drop(len(content)-1, "Drropping below in comment:")
                 else:
-                    drop(endline, "Dropping below in comment:")
+                    drop(endline-1, "Dropping below in comment:")
             elif e == __uniqueMin(a, b, c, d, e, f, g, h):  # comment /**/
                 content = content[e:]
                 end_note = content.find('*/')
                 drop(end_note+len('*/'), "Dropping below in multi-line comment:")
             elif f == __uniqueMin(a, b, c, d, e, f, g, h):  # import
-                if f > 0 and re.fullmatch(r'\w', content[f-1]):
+                if f == 0 or (f > 0 and re.fullmatch(r'\w', content[f-1])):
+                    content = content[h+len("import")-1:]
                     continue
                 content = content[f+len("import"):]
                 if re.fullmatch(r"\w", content[0]):
@@ -420,7 +424,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
                 content = content[import_end+1:]
             elif g == __uniqueMin(a, b, c, d, e, f, g, h):  # export
-                if g > 0 and re.fullmatch(r'\w', content[g-1]):
+                if g == 0 or (g > 0 and re.fullmatch(r'\w', content[g-1])):
+                    content = content[h+len("export"):]
                     continue
                 content = content[g+len("export"):]
                 if re.fullmatch(r"\w", content[0]):
@@ -449,9 +454,10 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 if semicolon:
                     content = content[semicolon+1:]
             elif h == __uniqueMin(a, b, c, d, e, f, g, h):  # module
-                if h > 0 and re.fullmatch(r'\w', content[h-1]):
+                if h == 0 or (h > 0 and re.fullmatch(r'\w', content[h-1])):
+                    content = content[h+len("module")-1:]
                     continue
-                content = content[h+len("export"):]
+                content = content[h+len("module"):]
                 if re.fullmatch(r"\w", content[0]):
                     continue
                 next = re.search(r"[^\s]", content)
@@ -502,7 +508,7 @@ def loadCache(relRootToCur: str):
                     headers: dict[str, list[str]] = dep["headers"]
                     modules: dict[str, list[str]] = dep["modules"]
                     sources: dict[str, list[str]] = dep["sources"]
-                    depsDict.update({source: dependency(
+                    depsDictCache.update({source: dependency(
                         dep["time"],
                         headersDependency(
                             set(headers["library"]), set(headers["local"])
@@ -520,3 +526,6 @@ def loadCache(relRootToCur: str):
             print("Original cache is not correct for reason below. Deleting.")
             print(e)
             os.remove(relCacheToCur)
+
+def cleanCache():
+    depsDictCache = None

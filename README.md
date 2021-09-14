@@ -2,7 +2,7 @@
 
 A minimal tool for build system for c++, it can automatically scan the dependencies (not all dependencies can be found, now only C++20 modules import and intermediate objects) and add them.
 
-As umake will cache the scanning results, you may want to delete it or disable it, should it caused errors. Configurations are supported but not enabled by default.
+As umake will cache the scanning results, you may want to delete it or disable it, should it caused errors, though I think there will not be a change for that to occur. Configurations are supported but not enabled by default.
 
 But well, now it only provides an extension for cmake. And not all compilers support cpp modules.
 
@@ -46,4 +46,4 @@ If you delete a .ifc file without deleting its corresponding object, errors will
 
 And if you use some generators other than Ninja, you may meet errors as I may not walk through them at the first time. And you can post an issue and provide neccessary information about it, then I'll be able to try fixing them.
 
-Visual Studio may meet errors, such as .ifc files can't be deleted if you modify the codes in your project and build them several times, you can close VS and then delete them by yourselves. And normally you only need to rerun the build task or recompile the main source file by single, other than rebuild, if you meet a incrediBuild error. I didn't meet those problems when using Visual Studio Code.
+Visual Studio may meet errors, such as .ifc files can't be deleted if you modify the codes in your project and build them several times, you can close VS and then delete them and corresponding immediate object files by yourselves. And normally you only need to rerun the build task or recompile the main source file by single, other than rebuild, if you meet a incrediBuild error. I didn't meet those problems when using Visual Studio Code.
