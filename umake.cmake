@@ -299,7 +299,9 @@ function(add_module_implement TARGET _SOURCE SOURCE)
     add_library(${IMPLEMENT_TARGET} STATIC ${SOURCE})
 
     add_dependencies(${IMPLEMENT_TARGET} ${ESCAPED_TARGET})
-    add_dependencies(${IMPLEMENT_TARGET} ${DEPENDS})
+    if(DEPENDS)
+        add_dependencies(${IMPLEMENT_TARGET} ${DEPENDS})
+    endif()
     message(DEBUG "Link ${DEPENDS} to ${IMPLEMENT_TARGET}.")
     target_link_libraries(${IMPLEMENT_TARGET} PUBLIC ${DEPENDS})
 
@@ -348,7 +350,9 @@ function (add_moduled_executable TARGET)
     target_enable_cxx_modules(${TARGET})
 
     message(DEBUG "${TARGET} has a dependency on ${DEPENDS}")
-    add_dependencies(${TARGET} ${DEPENDS})
+    if(DEPENDS)
+        add_dependencies(${TARGET} ${DEPENDS})
+    endif()
     target_link_libraries(${TARGET} PUBLIC ${DEPENDS})
 
     foreach (REFERENCE IN LISTS REFERENCES)

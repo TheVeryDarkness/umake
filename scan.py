@@ -180,6 +180,13 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
 
                     importedModules.unionWith(newImported)
                     dependedSources.unionWith(newSources)
+        if deps.implement != None:
+            relInterfaceToRoot = modulesBiDict[deps.implement]
+            newImported, newSources = __collectDependencies(
+                relInterfaceToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+
+            importedModules.unionWith(newImported)
+            dependedSources.unionWith(newSources)
         for imported in deps.modules.module:
             if ':' not in imported:
                 relImportedToRoot = modulesBiDict[imported]
@@ -441,7 +448,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
                 if semicolon:
                     content = content[semicolon+1:]
-            elif h == __uniqueMin(a, b, c, d, e, f, g, h):
+            elif h == __uniqueMin(a, b, c, d, e, f, g, h):  # module
                 if h > 0 and re.fullmatch(r'\w', content[h-1]):
                     continue
                 content = content[h+len("export"):]
@@ -452,6 +459,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 content = content[next.span()[0]:]
                 semicolon = content.find(";")
                 implement = __removeSpace(content[:semicolon])
+                if re.fullmatch(r"\s*", implement):
+                    continue
                 info.implement = implement
 
                 content = content[semicolon+1:]
