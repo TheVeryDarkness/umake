@@ -75,9 +75,15 @@ function (target_enable_cxx_modules TARGET)
     target_compile_options(${TARGET} PRIVATE ${CXX_MODULES_FLAGS})
 endfunction ()
 
-# Add module dependencies to the target
-function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
+# Add module inference dependencies to the target
+function(target_add_module_interface_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
     target_link_libraries(${ESCAPED_TARGET} PUBLIC ${ESCAPED_REFERENCE})
+    add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+endfunction()
+
+# Add module inference and implementation dependencies to the target
+function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
+    target_add_module_interface_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
 
     get_target_property(HAS_IMPLEMENT ${ESCAPED_REFERENCE} CXX_MODULE_HAS_IMPLEMENT)
     if(${HAS_IMPLEMENT})
@@ -89,7 +95,6 @@ function(target_add_module_dependencies ESCAPED_TARGET ESCAPED_REFERENCE)
     endif()
 
     message(DEBUG "${ESCAPED_TARGET} has a dependency on ${ESCAPED_REFERENCE}")
-    add_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
 endfunction()
 
 function(add_object_dependency SOURCE REFERENCE)
@@ -167,7 +172,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
         string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
-        # target_add_module_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
+        target_add_module_interface_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
@@ -231,7 +236,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
         foreach(ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
-            # target_add_module_dependencies(${PRECOMPILING_TARGET} ${ESCAPED_REFERENCE})
+            target_add_module_interface_dependencies(${PRECOMPILING_TARGET} ${ESCAPED_REFERENCE})
         endforeach()
 
         message(DEBUG "${ESCAPED_TARGET} has a dependency on ${PRECOMPILING_TARGET}")
