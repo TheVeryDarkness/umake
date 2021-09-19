@@ -530,6 +530,8 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
         elseif(CMAKE_CURRENT_FUNCTION_LIST_DIR)
             set(UMAKE_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/umake.py")
             message(WARNING "Configuration does not exist or can't be parsed, use current dir.")
+        else()
+            message(FATAL_ERROR "Please specify umake path.")
         endif()
     endif()
     execute_process(
