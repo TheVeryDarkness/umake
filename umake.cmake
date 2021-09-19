@@ -235,9 +235,6 @@ function (add_module_library TARGET _SOURCE SOURCE)
             DEPENDS ${OUT_FILE} ${ESCAPED_REFERENCES}
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         )
-        foreach(ESCAPED_REFERENCE IN LISTS ESCAPED_REFERENCES)
-            target_add_module_interface_dependencies(${PRECOMPILING_TARGET} ${ESCAPED_REFERENCE})
-        endforeach()
 
         message(DEBUG "${ESCAPED_TARGET} has a dependency on ${PRECOMPILING_TARGET}")
         add_dependencies(${ESCAPED_TARGET} ${PRECOMPILING_TARGET})
