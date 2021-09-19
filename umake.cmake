@@ -519,22 +519,21 @@ function(EXECUTE_UMAKE_PY_FOR_DEPENDENCIES OUT)
     # Check if ARGC is odd.
     # Odd ARGC means path to umake.py is specified
     math(EXPR ODD "(${ARGC}-1)%2")
+    set(CONFIG_FLAGS "")
     if(ODD)
         list(POP_FRONT ARGN UMAKE_PATH)
     else()
-        if(${CMAKE_VERSION} VERSION_LESS 3.19)
-            message(WARNING "CMake doesn't support parsing json string yet. Pass \"umake.py\" path instead.")
-        endif()
-
-        if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/umakeConfig.json")
+        if(${CMAKE_VERSION} VERSION_GREATER 3.19 AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/umakeConfig.json")
+            set(CONFIG_EXISTS "--load-config")
             file(STRINGS "umakeConfig.json" configJSON)
             string(JSON UMAKE_PATH GET ${configJSON} "umake.py")
         else()
-            message(FATAL_ERROR "Configuration does not exist, please specify the path to umake.py.")
+            set(UMAKE_PATH "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/umake.py")
+            message(WARNING "Configuration does not exist or can't be parsed, use current dir.")
         endif()
     endif()
     execute_process(
-        COMMAND python ${UMAKE_PATH} --load-config --save-config --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
+        COMMAND python ${UMAKE_PATH} ${CONFIG_FLAGS} --root ${CMAKE_CURRENT_LIST_DIR} --target cmake ${ARGN}
         OUTPUT_VARIABLE RESULT
         ERROR_VARIABLE ERROR
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
