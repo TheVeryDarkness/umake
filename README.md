@@ -46,4 +46,8 @@ If you delete a .ifc file without deleting its corresponding object, errors will
 
 And if you use some generators other than Ninja, you may meet errors as I may not walk through them at the first time. And you can post an issue and provide neccessary information about it, then I'll be able to try fixing them.
 
-Visual Studio may meet errors, such as .ifc files can't be deleted if you modify the codes in your project and build them several times, you can close VS and then delete them and corresponding immediate object files by yourselves, sometimes just reopen did work. And normally you only need to rerun the build task or recompile the main source file by single, other than rebuild, if you meet a incrediBuild error. I didn't meet those problems when using Visual Studio Code.
+Visual Studio may meet errors, such as .ifc files can't be deleted if you modify the codes in your project and build them several times, you can close VS and then delete them and corresponding immediate object files by yourselves, sometimes just reopen did work, but I think it's the fastest way to switch to another config in VS and then switch back.
+
+And normally you only need to rerun the build task or recompile the main source file by single, other than rebuild, if you meet a incrediBuild error.
+
+I didn't meet those problems when using Visual Studio Code.
