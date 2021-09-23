@@ -237,8 +237,12 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
                         .format(relFileToCur)
                     )
                 continue
-            scanFileDependencies(relFileToCur, relRootToCur,
-                                 verbosity, encoding, extMapper, logUpdate)
+            try:
+                scanFileDependencies(relFileToCur, relRootToCur,
+                                     verbosity, encoding, extMapper, logUpdate)
+            except:
+                print("In file {}:".format(relFileToCur), file=stderr)
+                raise
 
 
 def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> None:
@@ -346,6 +350,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     raise Exception("What's being included?")
             elif b == __uniqueMin(a, b, c, d, e, f, g, h):  # string
                 content = content[b+1:]
+                multi = content[0] == '('  # Check if is raw string literal
+
                 while True:
                     escape = content.find("\\")
                     next_quote = content.find(r'"')
@@ -354,8 +360,10 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                         break
                     drop(escape+1, "Dropping below in escaped string:")
 
-                assert linesep not in content[:next_quote +
-                                              1], "Multiline string"
+                assert (
+                    linesep not in content[:next_quote + 1]
+                    or (multi and content[next_quote-1] == ')'
+                        )), "Multiline string"
                 drop(next_quote, "Dropping below in string:")
             elif c == __uniqueMin(a, b, c, d, e, f, g, h):  # character
                 content = content[c+1:]
@@ -526,6 +534,7 @@ def loadCache(relRootToCur: str):
             print("Original cache is not correct for reason below. Deleting.")
             print(e)
             os.remove(relCacheToCur)
+
 
 def cleanCache():
     depsDictCache = None
