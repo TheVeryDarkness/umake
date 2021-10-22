@@ -183,7 +183,11 @@ function (add_module_library TARGET _SOURCE SOURCE)
     endforeach()
 
     if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
-        target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}${OUT_FILE}")
+        if(CMAKE_GENERATOR MATCHES "Visual Studio [0-9 ]*")
+            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}${OUT_FILE}")
+        else()
+            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}" "${OUT_FILE}")
+        endif()
     else()
         # TODO: CXX flags might be different
         set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} ${CXX_MODULES_VERSION_FLAG} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE} ${CXX_MODULES_OUTPUT_FLAG} ${OUT_FILE})
