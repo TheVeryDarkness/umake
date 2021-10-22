@@ -8,7 +8,6 @@ import os
 from sys import stderr, argv
 
 from scan import *
-from generate import *
 
 CONFIG_PATH = "umakeConfig.json"
 
