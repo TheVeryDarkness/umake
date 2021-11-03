@@ -246,6 +246,8 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
 
 
 def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> None:
+    if "ast.ixx" in relSrcToCur:
+        pass
     if not path.exists(relSrcToCur):
         raise Exception(
             "Unexistent file \"{}\" referenced.".format(relSrcToCur))
@@ -349,22 +351,29 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 else:
                     raise Exception("What's being included?")
             elif b == __uniqueMin(a, b, c, d, e, f, g, h):  # string
+                raw = content[b-1] == 'R'  # Check if is raw string literal
                 content = content[b+1:]
-                multi = content[0] == '('  # Check if is raw string literal
+                if raw:
+                    end = ')'+content[:content.find("(")]+'"'
+                else:
+                    end = '"'
 
                 while True:
                     escape = content.find("\\")
-                    next_quote = content.find(r'"')
+                    next_quote = content.find(end)
                     assert next_quote != -1, "Quotes not matched."
-                    if escape == -1 or escape > next_quote:
+                    if raw or escape < 0 or escape > next_quote:
                         break
+                    assert (
+                        linesep not in content[:escape + 1]
+                        or raw
+                    ), "Multiline string"
                     drop(escape+1, "Dropping below in escaped string:")
-
                 assert (
                     linesep not in content[:next_quote + 1]
-                    or (multi and content[next_quote-1] == ')'
-                        )), "Multiline string"
-                drop(next_quote, "Dropping below in string:")
+                    or raw
+                ), "Multiline string"
+                drop(next_quote+1, "Dropping below in escaped string:")
             elif c == __uniqueMin(a, b, c, d, e, f, g, h):  # character
                 content = content[c+1:]
                 while True:
@@ -509,7 +518,7 @@ def loadCache(relRootToCur: str):
                 s: dict[
                     str, dict[str,
                               Any
-                              #Union[str, dict[str, list[str]]]
+                              # Union[str, dict[str, list[str]]]
                               ]
                 ] = json.load(cache)
                 for source, dep in s.items():
