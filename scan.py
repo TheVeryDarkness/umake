@@ -426,8 +426,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     info.modules.local.add(imported)
                 elif re.fullmatch(r"[\w.:]+", imported):
                     if imported.startswith(":"):
-                        assert info.provide, "Importing partition should be written after exporting."
-                        main: str = info.provide
+                        assert info.provide or info.implement, "Importing partition should be written after module declaration or implementation."
+                        main: str = info.provide if info.provide else info.implement
                         if ":" in main:
                             semicolon = main.rfind(":")
                             main = main[:semicolon]
