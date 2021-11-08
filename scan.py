@@ -190,13 +190,12 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
         for imported in deps.modules.module:
-            if ':' not in imported:
-                relImportedToRoot = modulesBiDict[imported]
-                newImported, newSources = __collectDependencies(
-                    relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+            relImportedToRoot = modulesBiDict[imported]
+            newImported, newSources = __collectDependencies(
+                relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
 
-                importedModules.unionWith(newImported)
-                dependedSources.unionWith(newSources)
+            importedModules.unionWith(newImported)
+            dependedSources.unionWith(newSources)
 
         calculatedDependencies[relSrcToRoot] = (
             importedModules, dependedSources)
