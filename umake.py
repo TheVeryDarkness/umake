@@ -35,7 +35,9 @@ def loadConfig(args: argparse.Namespace, relRoot: str, default: argparse.Namespa
 def saveConfig(args: argparse.Namespace):
     vars(args)["umake.py"] = argv[0]
     vars(args)["root"] = path.relpath(vars(args)["root"])
-    vars(args)["folders"] = [path.relpath(folder) for folder in vars(args)["folders"]]
+    vars(args)["folders"] = [
+        path.relpath(folder) for folder in vars(args)["folders"]
+    ]
     with open(path.join(args.root, CONFIG_PATH), 'w') as config:
         json.dump(vars(args), config)
 
