@@ -1,4 +1,5 @@
 # Under MIT License, see ./License
+# It's based on CMakeCxxModules(https://github.com/NTSFka/CMakeCxxModules)
 
 cmake_minimum_required(VERSION 3.7)
 
@@ -10,27 +11,30 @@ include(CheckCXXCompilerFlag)
 set(CXX_DEFINITION_HEAD -D)
 set(CXX_PRECOMPILED_MODULES_DIR ${CMAKE_CURRENT_BINARY_DIR}/.cppm)
 set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE FALSE)
+
+set(UMAKE_FLAG_MODE)
 if(MSVC)
     # See https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
     # See https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5050
     set(CXX_MODULES_FOR_CHECK /experimental:module)
-    set(CXX_MODULES_FLAGS /nologo /experimental:module)
+    list(APPEND CXX_MODULES_FLAGS /nologo /experimental:module)
+    set(CXX_MODULES_SPECIFY_MODULE_NAME TRUE)
+
     set(CXX_PRECOMPILED_MODULES_EXT ifc)
     set(CXX_MODULES_CREATE_FLAGS -c)
-    set(CXX_MODULES_SPECIFY_MODULE_NAME TRUE)
     set(CXX_MODULES_PRECOMPILE_WHEN_COMPILE TRUE)
-
-    # It's mentioned in CMakeCxxModules(https://github.com/NTSFka/CMakeCxxModules)
-    # I can't find any information in documents.
+    # It's mentioned in CMakeCxxModules, but I did't find any information in documents.
     if(MSVC_VERSION LESS 1928)
         list(APPEND CXX_MODULES_FLAGS /module:interface)
         set(CXX_MODULES_REFERENCE_FLAG /module:reference)
-        set(CXX_MODULES_OUTPUT_FLAG /module:output)
+        set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG /module:output)
     else()
         list(APPEND CXX_MODULES_FLAGS /interface)
         set(CXX_MODULES_REFERENCE_FLAG /reference)
-        set(CXX_MODULES_OUTPUT_FLAG /ifcOutput)
+        set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG /ifcOutput)
     endif()
+    set(UMAKE_FLAG_MODE SPACE)
+
     if(NOT ${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
         if(NOT CMAKE_CXX_STANDARD)
             set(CXX_MODULES_VERSION_FLAG "/std:c++20")
@@ -46,7 +50,7 @@ else() # Any more check?
     set(CXX_PRECOMPILED_MODULES_EXT pcm)
     set(CXX_MODULES_CREATE_FLAGS -fmodules -x c++-module --precompile)
     set(CXX_MODULES_REFERENCE_FLAG -fmodule-file=)
-    set(CXX_MODULES_OUTPUT_FLAG -o)
+    set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG -o)
     if(NOT ${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
         if(NOT CMAKE_CXX_STANDARD)
             set(CXX_MODULES_VERSION_FLAG "-std=c++20")
@@ -177,26 +181,36 @@ function (add_module_library TARGET _SOURCE SOURCE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         target_compile_options(${ESCAPED_TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
         )
         add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
     endforeach()
 
     if(${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
         if(CMAKE_GENERATOR MATCHES "Visual Studio [0-9 ]*")
-            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}${OUT_FILE}")
-        else()
-            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_MODULES_OUTPUT_FLAG}" "${OUT_FILE}")
+            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG}${OUT_FILE}")
+        elseif(UMAKE_FLAG_MODE STREQUAL SPACE)
+            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG}" "${OUT_FILE}")
+        else()# UMAKE_FLAG_MODE STREQUAL EQUAL
+            target_compile_options(${ESCAPED_TARGET} PRIVATE "${CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG}${OUT_FILE}")
         endif()
     else()
         # TODO: CXX flags might be different
-        set(cmd ${CMAKE_CXX_COMPILER} ${CXX_MODULES_FLAGS} ${CXX_MODULES_VERSION_FLAG} "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>,\ >" ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE} ${CXX_MODULES_OUTPUT_FLAG} ${OUT_FILE})
+        set(cmd ${CMAKE_CXX_COMPILER})
+        list(APPEND cmd ${CXX_MODULES_FLAGS})
+        list(APPEND cmd ${CXX_MODULES_VERSION_FLAG})
+        list(APPEND cmd ${CXX_MODULES_CREATE_FLAGS} ${IN_FILE})
+        list(APPEND cmd ${CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG} ${OUT_FILE})
+
+        #get_target_property(options ${ESCAPED_TARGET} COMPILE_OPTIONS)
+        #list(APPEND cmd ${options})
+        list(APPEND cmd "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>, >")
         set(ESCAPED_REFERENCES)
         foreach (REFERENCE IN LISTS REFERENCES)
             string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
             get_target_property(FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
             get_target_property(NAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
-            list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG} "${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT}")
+            list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG}${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT})
             list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
         endforeach ()
 
@@ -259,7 +273,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         if(NOT ${_CLEAN_FILES})
             set(_CLEAN_FILES ${OUT_FILE})
         else()
-            string(APPEND _CLEAN_FILES ${OUT_FILE})
+            list(APPEND _CLEAN_FILES ${OUT_FILE})
         endif()
         set_property(TARGET ${ESCAPED_TARGET} PROPERTY ADDITIONAL_CLEAN_FILES ${_CLEAN_FILES})
         set_property(
@@ -320,7 +334,7 @@ function(add_module_implement TARGET _SOURCE SOURCE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         target_compile_options(${IMPLEMENT_TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
         )
         add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
     endforeach()
@@ -368,7 +382,7 @@ function (add_moduled_executable TARGET)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         target_compile_options(${TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
         )
         foreach(SOURCE IN LISTS SOURCES)
             add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
@@ -425,7 +439,7 @@ function (add_moduled_library TARGET)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         target_compile_options(${TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
         )
         foreach(SOURCE IN LISTS SOURCES)
             add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
@@ -470,7 +484,7 @@ function(add_source_file_target TARGET)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         target_compile_options(${TARGET}
-            PRIVATE "SHELL:${CXX_MODULES_REFERENCE_FLAG} ${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}"
+            PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
         )
         foreach(SOURCE IN LISTS SOURCES)
             add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
