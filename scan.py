@@ -60,6 +60,9 @@ class modulesDependency:
         self.library = self.library.union(newDeps.library)
         self.local = self.library.union(newDeps.local)
 
+    def contain(self, module: set[str], library: set[str], local: set[str]) -> bool:
+        return self.module.issuperset(module) and self.library.issuperset(library) and self.local.issuperset(local)
+
     def __repr__(self) -> str:
         return str(vars(self))
 
@@ -73,6 +76,10 @@ class sourcesDependency:
 
     def unionWith(self, newDeps: sourcesDependency):
         self.sources = self.sources.union(newDeps.sources)
+
+    def contain(self, sources: set[str]) -> bool:
+        return self.sources.issuperset(sources)
+
 
     def __repr__(self) -> str:
         return str(vars(self))
@@ -138,21 +145,25 @@ calculatedDependencies: dict[str,
                              tuple[modulesDependency, sourcesDependency]] = dict()
 
 
-def __collectDependencies(relFileToRoot: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
+def __collectDependencies(relFileToRoot: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool, touched: set[str]) -> tuple[modulesDependency, sourcesDependency]:
     if relFileToRoot in calculatedDependencies:
         return calculatedDependencies[relFileToRoot]
     relFileToCur = path.relpath(
         path.join(relRootToCur, relFileToRoot))
     newImported, newSources = recursiveCollectDependencies(
-        relFileToCur, relRootToCur, verbosity, encoding, ext, logUpdate)
+        relFileToCur, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
     return newImported, newSources
 
 
-def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool) -> tuple[modulesDependency, sourcesDependency]:
+def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity: int, encoding: str, ext: extensionMapper, logUpdate: bool, touched: set[str]) -> tuple[modulesDependency, sourcesDependency]:
     try:
         relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
 
         relSrcDirToRoot = path.dirname(relSrcToRoot)
+
+        assert relSrcToRoot not in touched, f"{relSrcToCur} indirectly dependended by itself."
+        touched.add(relSrcToRoot)
+
         deps = depsDict[relSrcToRoot]
         importedModules = deps.modules
         dependedSources = deps.sources
@@ -161,7 +172,7 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
             relIncludedToRoot = path.relpath(
                 path.join(relSrcDirToRoot, relIncludedToSrc))
             newImported, newSources = __collectDependencies(
-                relIncludedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+                relIncludedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
 
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
@@ -174,25 +185,24 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
                         if ':' in provide:
                             provide = provide[provide.find(':'):]
                         imported = provide+':'+imported
-                    assert imported in modulesBiDict, "Importing {} from {}, but it's not found.".format(
-                        imported, relSrcToCur)
+                    assert imported in modulesBiDict, f"Importing {imported} from {relSrcToCur}, but it's not found."
                     relImportedToRoot = modulesBiDict[imported]
                     newImported, newSources = __collectDependencies(
-                        relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+                        relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
 
                     importedModules.unionWith(newImported)
                     dependedSources.unionWith(newSources)
         if deps.implement != None:
             relInterfaceToRoot = modulesBiDict[deps.implement]
             newImported, newSources = __collectDependencies(
-                relInterfaceToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+                relInterfaceToRoot, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
 
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
         for imported in deps.modules.module:
             relImportedToRoot = modulesBiDict[imported]
             newImported, newSources = __collectDependencies(
-                relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate)
+                relImportedToRoot, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
 
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
@@ -201,7 +211,7 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
             importedModules, dependedSources)
         return importedModules, dependedSources
     except:
-        print(YELLOW + "In file {}:".format(relSrcToCur) + RESET, file=stderr)
+        print(YELLOW + f"In file {relSrcToCur}:" + RESET, file=stderr)
         raise
 
 
@@ -213,8 +223,7 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
             if path.exists(relDirToRoot) and path.exists(excludeDir) and path.samefile(relDirToRoot, excludeDir):
                 if verbosity >= 4:
                     print(
-                        "Walked-through dir \"{}\" is excluded as it matches \"{}\"."
-                        .format(relDirToCur, excludeDir)
+                        f"Walked-through dir \"{relDirToCur}\" is excluded as it matches \"{excludeDir}\"."
                     )
                 continue
         for file in files:
@@ -225,22 +234,20 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
                 if path.samefile(relFileToRoot, excludeFile):
                     if verbosity >= 4:
                         print(
-                            "Walked-through file \"{}\" is excluded as it matches \"{}\"."
-                            .format(relFileToCur, excludeFile)
+                            f"Walked-through file \"{relFileToCur}\" is excluded as it matches \"{excludeFile}\"."
                         )
                     continue
             if extName not in moduleExtension and extName not in extMapper.head_source_pairs.keys() and extName not in extMapper.head_source_pairs.values() and extName not in extMapper.headers and extName not in extMapper.sources:
                 if verbosity >= 4:
                     print(
-                        "Walked-through file \"{}\" has a different extension name, skipped."
-                        .format(relFileToCur)
+                        f"Walked-through file \"{relFileToCur}\" has a different extension name, skipped."
                     )
                 continue
             try:
                 scanFileDependencies(relFileToCur, relRootToCur,
                                      verbosity, encoding, extMapper, logUpdate)
             except:
-                print("In file {}:".format(relFileToCur), file=stderr)
+                print(f"In file {relFileToCur}:", file=stderr)
                 raise
 
 
@@ -249,33 +256,34 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
         pass
     if not path.exists(relSrcToCur):
         raise Exception(
-            "Unexistent file \"{}\" referenced.".format(relSrcToCur))
+            f"Unexistent file \"{relSrcToCur}\" referenced.")
 
     relSrcToRoot = path.relpath(relSrcToCur, relRootToCur)
     relLog = path.relpath(path.join(relRootToCur, LOG_PATH))
     skip = False
+
+    info: dependency
     if relSrcToRoot in depsDictCache:
         lastScanTime = depsDictCache[relSrcToRoot].time
         lastModTime = path.getmtime(relSrcToCur)
         if lastScanTime <= lastModTime:
             if verbosity >= 2:
                 print(
-                    BLUE + "Modification after last scan detected on file \"{}\"".format(relSrcToCur) + RESET)
+                    BLUE + f"Modification after last scan detected on file \"{relSrcToCur}\"" + RESET)
             with open(relLog, 'a') as log:
                 print(
-                    "{} < {}, \"{}\"".format(
-                        lastScanTime, lastModTime, relSrcToCur),
+                    f"{lastScanTime} < {lastModTime}, \"{relSrcToCur}\"",
                     file=log
                 )
         else:
             if verbosity >= 3:
                 print(
-                    BLUE + "Scanned file \"{}\", skipped".format(relSrcToCur) + RESET)
+                    BLUE + f"Scanned file \"{relSrcToCur}\", skipped" + RESET)
             skip = True
     elif logUpdate:
         with open(relLog, 'a') as log:
             print(
-                "Missed, \"{}\"".format(relSrcToCur),
+                f"Missed, \"{relSrcToCur}\"",
                 file=log
             )
     if skip:
@@ -289,7 +297,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
 
     with open(relSrcToCur, encoding=encoding) as file:
         if verbosity >= 1:
-            print(BLUE + "Scanning file \"{}\"".format(relSrcToCur) + RESET)
+            print(BLUE + f"Scanning file \"{relSrcToCur}\"" + RESET)
         global content
         content = " " + file.read()
 
@@ -299,7 +307,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 print(CYAN+desc+RESET)
                 print(content[:next_index])
             content = content[next_index+1:]
-        info: dependency = dependency(time=time.time())
+        info = dependency(time=time.time())
 
         relSrcSplitedHeadToCur, extName = path.splitext(relSrcToCur)
         if extName in ext.headers:
@@ -425,8 +433,8 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     info.modules.local.add(imported)
                 elif re.fullmatch(r"[\w.:]+", imported):
                     if imported.startswith(":"):
-                        assert info.provide or info.implement, "Importing partition should be written after module declaration or implementation."
-                        main: str = info.provide if info.provide else info.implement
+                        main: str | None = info.provide if info.provide else info.implement
+                        assert main, "Importing partition should be written after module declaration or implementation."
                         if ":" in main:
                             semicolon = main.rfind(":")
                             main = main[:semicolon]
@@ -502,8 +510,8 @@ def deleteCache(relRootToCur: str):
     relCacheToCur = path.relpath(path.join(relRootToCur, CACHE_PATH))
     if path.exists(relCacheToCur):
         os.remove(relCacheToCur)
-        print(YELLOW+"Root is \"{}\".".format(relRootToCur)+RESET, file=stderr)
-        print(YELLOW+"Cache at \"{}\" deleted.".format(relCacheToCur) +
+        print(YELLOW+f"Root is \"{relRootToCur}\"."+RESET, file=stderr)
+        print(YELLOW+f"Cache at \"{relCacheToCur}\" deleted." +
               RESET, file=stderr)
     else:
         print(YELLOW+"Cache not found."+RESET, file=stderr)
