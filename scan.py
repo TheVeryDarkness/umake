@@ -23,6 +23,15 @@ RED: str = Fore.RED
 RESET: str = Fore.RESET
 linesep = '\n'
 
+VERBOSITY_SHOW_STACKTRACE = 1
+VERBOSITY_SCANNING_FILE = 1
+VERBOSITY_MODIFIED_FILE = 2
+VERBOSITY_UNMODIFIED_FILE = 3
+VERBOSITY_EXCLUDE_DIRECTORY = 4
+VERBOSITY_EXCLUDE_FILE = 4
+VERBOSITY_INCLUDING_HEADER = 4
+VERBOSITY_EXPORTING = 5
+VERBOSITY_DROPPING_FILE_CONTENT = 6
 
 def __removeSpace(s: str):
     return s.strip().replace(' ', '').replace('\t', '')
@@ -221,7 +230,7 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
         relDirToRoot = path.relpath(relDirToCur, relRootToCur)
         for excludeDir in excludeDirs:
             if path.exists(relDirToRoot) and path.exists(excludeDir) and path.samefile(relDirToRoot, excludeDir):
-                if verbosity >= 4:
+                if verbosity >= VERBOSITY_EXCLUDE_DIRECTORY:
                     print(
                         f"Walked-through dir \"{relDirToCur}\" is excluded as it matches \"{excludeDir}\"."
                     )
@@ -232,13 +241,13 @@ def scanAllFiles(relProjToCur: str, relRootToCur: str, excludeFiles: set[str], e
             relFileToRoot = path.relpath(relFileToCur, relRootToCur)
             for excludeFile in excludeFiles:
                 if path.samefile(relFileToRoot, excludeFile):
-                    if verbosity >= 4:
+                    if verbosity >= VERBOSITY_EXCLUDE_FILE:
                         print(
                             f"Walked-through file \"{relFileToCur}\" is excluded as it matches \"{excludeFile}\"."
                         )
                     continue
             if extName not in moduleExtension and extName not in extMapper.head_source_pairs.keys() and extName not in extMapper.head_source_pairs.values() and extName not in extMapper.headers and extName not in extMapper.sources:
-                if verbosity >= 4:
+                if verbosity >= VERBOSITY_EXCLUDE_FILE:
                     print(
                         f"Walked-through file \"{relFileToCur}\" has a different extension name, skipped."
                     )
@@ -267,7 +276,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
         lastScanTime = depsDictCache[relSrcToRoot].time
         lastModTime = path.getmtime(relSrcToCur)
         if lastScanTime <= lastModTime:
-            if verbosity >= 2:
+            if verbosity >= VERBOSITY_MODIFIED_FILE:
                 print(
                     BLUE + f"Modification after last scan detected on file \"{relSrcToCur}\"" + RESET)
             with open(relLog, 'a') as log:
@@ -276,7 +285,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     file=log
                 )
         else:
-            if verbosity >= 3:
+            if verbosity >= VERBOSITY_UNMODIFIED_FILE:
                 print(
                     BLUE + f"Scanned file \"{relSrcToCur}\", skipped" + RESET)
             skip = True
@@ -296,14 +305,14 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
         return
 
     with open(relSrcToCur, encoding=encoding) as file:
-        if verbosity >= 1:
+        if verbosity >= VERBOSITY_SCANNING_FILE:
             print(BLUE + f"Scanning file \"{relSrcToCur}\"" + RESET)
         global content
         content = " " + file.read()
 
         def drop(next_index: int, desc: str):
             global content
-            if verbosity >= 6:
+            if verbosity >= VERBOSITY_DROPPING_FILE_CONTENT:
                 print(CYAN+desc+RESET)
                 print(content[:next_index])
             content = content[next_index+1:]
@@ -344,14 +353,14 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                 if lib:
                     span = lib.span()
                     _path = content[span[0]:span[1]]
-                    if verbosity >= 4:
+                    if verbosity >= VERBOSITY_INCLUDING_HEADER:
                         print(BLUE + "Including library header "+_path + RESET)
                     content = content[span[1]:]
                     info.headers.library.add(_path[1:-1])
                 elif loc:
                     span = loc.span()
                     _path = content[span[0]:span[1]]
-                    if verbosity >= 4:
+                    if verbosity >= VERBOSITY_INCLUDING_HEADER:
                         print(BLUE + "Including local header "+_path + RESET)
                     content = content[span[1]:]
                     info.headers.local.add(_path[1:-1])
@@ -472,7 +481,7 @@ def scanFileDependencies(relSrcToCur: str, relRootToCur: str,  verbosity: int, e
                     parDict[info.provide].add(partition)
                     info.modules.module.add(info.provide+partition)
                 else:
-                    if verbosity >= 5:
+                    if verbosity >= VERBOSITY_EXPORTING:
                         print(CYAN + "Exporting" + RESET)
 
                 if semicolon:

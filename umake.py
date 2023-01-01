@@ -381,7 +381,7 @@ def main():
         )
         if not cacheDisabled:
             deleteCache(relRoot)
-        if verbosity:
+        if verbosity >= VERBOSITY_SHOW_STACKTRACE:
             print(YELLOW + "Re-raise for stack trace." + RESET)
             raise
 
