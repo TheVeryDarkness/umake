@@ -132,15 +132,20 @@ class extensionMapper:
         self.head_source_pairs = head_source_pairs
 
 
+
 # module name <--> relative path to root directory
 global modulesBiDict
 modulesBiDict: bidict[str, str] = bidict()
+# file content
 global content
 content: str
+# relative path to root directory --> dependencies
 global depsDict
 depsDict: dict[str, dependency] = dict()
+# cache of depsDict
 global depsDictCache
 depsDictCache: dict[str, dependency] = dict()
+# main module name --> partitions' name
 global parDict
 parDict: dict[str, set[str]] = dict()
 # module name <--> reletive path of implement unit to root directory
@@ -185,9 +190,8 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
 
             importedModules.unionWith(newImported)
             dependedSources.unionWith(newSources)
-        if deps.provide != None:
+        if deps.provide is not None:
             provide = deps.provide
-            assert provide, "Oops!"
             for imported in deps.modules.module:
                 if ':' in imported:
                     if imported.startswith(':'):
@@ -201,7 +205,7 @@ def recursiveCollectDependencies(relSrcToCur: str, relRootToCur: str, verbosity:
 
                     importedModules.unionWith(newImported)
                     dependedSources.unionWith(newSources)
-        if deps.implement != None:
+        if deps.implement is not None:
             relInterfaceToRoot = modulesBiDict[deps.implement]
             newImported, newSources = __collectDependencies(
                 relInterfaceToRoot, relRootToCur, verbosity, encoding, ext, logUpdate, touched)
