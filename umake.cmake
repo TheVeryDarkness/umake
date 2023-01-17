@@ -135,7 +135,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
     # Set cmake to use CXX compiler on C++ module files
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
-    string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
+    string(REPLACE ":" "-" ESCAPED_TARGET ${TARGET})
 
     set(HAS_IMPLEMENT FALSE)
     set(DEPENDS)
@@ -186,14 +186,14 @@ function (add_module_library TARGET _SOURCE SOURCE)
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_interface_dependencies(${ESCAPED_TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
             target_compile_options(${ESCAPED_TARGET}
-                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
+                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT}
             )
         endif()
         add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
@@ -223,11 +223,11 @@ function (add_module_library TARGET _SOURCE SOURCE)
             list(APPEND cmd ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR})
         endif()
         foreach (REFERENCE IN LISTS REFERENCES)
-            string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+            string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
             get_target_property(FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
             get_target_property(NAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
             if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
-                list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG}${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${FILE}.${CXX_PRECOMPILED_MODULES_EXT})
+                list(APPEND cmd ${CXX_MODULES_REFERENCE_FLAG}${NAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT})
             endif()
             list(APPEND ESCAPED_REFERENCES ${ESCAPED_REFERENCE})
         endforeach ()
@@ -315,7 +315,7 @@ function(add_module_implement TARGET _SOURCE SOURCE)
     # Set cmake to use CXX compiler on C++ module files
     set_source_files_properties(${SOURCE} PROPERTIES LANGUAGE CXX)
 
-    string(REPLACE ":" ".." ESCAPED_TARGET ${TARGET})
+    string(REPLACE ":" "-" ESCAPED_TARGET ${TARGET})
     string(CONCAT IMPLEMENT_TARGET "__impl__." ${ESCAPED_TARGET})
 
     set(DEPENDS)
@@ -352,14 +352,14 @@ function(add_module_implement TARGET _SOURCE SOURCE)
     list(APPEND REFERENCES ${ESCAPED_TARGET})
     # Select object libraries would cause errors if you use Visual Studio generators
     foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_dependencies(${IMPLEMENT_TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
             target_compile_options(${IMPLEMENT_TARGET}
-                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
+                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT}
             )
         endif()
         add_object_dependency(${SOURCE} ${ESCAPED_REFERENCE})
@@ -408,14 +408,14 @@ function (add_moduled_executable TARGET)
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
             target_compile_options(${TARGET}
-                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
+                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT}
             )
         endif()
         foreach(SOURCE IN LISTS SOURCES)
@@ -473,14 +473,14 @@ function (add_moduled_library TARGET)
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
             target_compile_options(${TARGET}
-                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
+                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT}
             )
         endif()
         foreach(SOURCE IN LISTS SOURCES)
@@ -526,14 +526,14 @@ function(add_source_file_target TARGET)
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
-        string(REPLACE ":" ".." ESCAPED_REFERENCE ${REFERENCE})
+        string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
         target_add_module_dependencies(${TARGET} ${ESCAPED_REFERENCE})
         get_target_property(INTERFACE_FILE ${ESCAPED_REFERENCE} CXX_MODULE_INTERFACE_FILE)
         get_target_property(MODULENAME ${ESCAPED_REFERENCE} CXX_MODULE_NAME)
         # Avoid de-duplication
         if(NOT ${CXX_MODULES_REFERENCE_DIRECTORY})
             target_compile_options(${TARGET}
-                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${INTERFACE_FILE}.${CXX_PRECOMPILED_MODULES_EXT}
+                PRIVATE ${CXX_MODULES_REFERENCE_FLAG}${MODULENAME}=${CXX_PRECOMPILED_MODULES_DIR}/${ESCAPED_REFERENCE}.${CXX_PRECOMPILED_MODULES_EXT}
             )
         endif()
         foreach(SOURCE IN LISTS SOURCES)
