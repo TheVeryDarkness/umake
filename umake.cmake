@@ -31,7 +31,9 @@ if(MSVC)
         set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG /module:output)
     else()
         list(APPEND CXX_MODULES_FLAGS /interface)
-        set(CXX_MODULES_REFERENCE_FLAG /reference)
+        # set(CXX_MODULES_REFERENCE_FLAG /reference)
+        set(CXX_MODULES_REFERENCES_FLAG /ifcSearchDir)
+        set(CXX_MODULES_REFERENCE_DIRECTORY TRUE)
         set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG /ifcOutput)
     endif()
     set(UMAKE_FLAG_MODE SPACE)
@@ -51,7 +53,7 @@ else() # Any more check?
     set(CXX_PRECOMPILED_MODULES_EXT pcm)
     set(CXX_MODULES_CREATE_FLAGS -fmodules -x c++-module --precompile)
     # set(CXX_MODULES_REFERENCE_FLAG -fmodule-file=)
-    set(CXX_MODULES_REFERENCES_FLAG -fprebuilt-module-path)
+    set(CXX_MODULES_REFERENCES_FLAG -fprebuilt-module-path=)
     set(CXX_MODULES_REFERENCE_DIRECTORY TRUE)
     set(CXX_PRECOMPILED_MODULE_INTERFACE_OUTPUT_FLAG -o)
     if(NOT ${CXX_MODULES_PRECOMPILE_WHEN_COMPILE})
@@ -182,7 +184,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
 
     if(${CXX_MODULES_REFERENCE_DIRECTORY})
         target_compile_options(${ESCAPED_TARGET}
-            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR}
+            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR}
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
@@ -220,7 +222,7 @@ function (add_module_library TARGET _SOURCE SOURCE)
         list(APPEND cmd "$<JOIN:$<TARGET_PROPERTY:${ESCAPED_TARGET},COMPILE_OPTIONS>, >")
         set(ESCAPED_REFERENCES)
         if(${CXX_MODULES_REFERENCE_DIRECTORY})
-            list(APPEND cmd ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR})
+            list(APPEND cmd ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR})
         endif()
         foreach (REFERENCE IN LISTS REFERENCES)
             string(REPLACE ":" "-" ESCAPED_REFERENCE ${REFERENCE})
@@ -346,7 +348,7 @@ function(add_module_implement TARGET _SOURCE SOURCE)
 
     if(${CXX_MODULES_REFERENCE_DIRECTORY})
         target_compile_options(${IMPLEMENT_TARGET}
-            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR}
+            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR}
         )
     endif()
     list(APPEND REFERENCES ${ESCAPED_TARGET})
@@ -404,7 +406,7 @@ function (add_moduled_executable TARGET)
 
     if(${CXX_MODULES_REFERENCE_DIRECTORY})
         target_compile_options(${TARGET}
-            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR}
+            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR}
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
@@ -469,7 +471,7 @@ function (add_moduled_library TARGET)
 
     if(${CXX_MODULES_REFERENCE_DIRECTORY})
         target_compile_options(${TARGET}
-            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR}
+            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR}
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
@@ -522,7 +524,7 @@ function(add_source_file_target TARGET)
 
     if(${CXX_MODULES_REFERENCE_DIRECTORY})
         target_compile_options(${TARGET}
-            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}=${CXX_PRECOMPILED_MODULES_DIR}
+            PRIVATE ${CXX_MODULES_REFERENCES_FLAG}${CXX_PRECOMPILED_MODULES_DIR}
         )
     endif()
     foreach (REFERENCE IN LISTS REFERENCES)
